@@ -1,0 +1,8 @@
+Django==6.1.1
+djangorestframework==3.18.1
+django-cors-headers==4.9.0
+python-dotenv==1.2.1
+psycopg[binary]==3.3.2
+PyJWT[crypto]==2.11.0
+pytest==9.0.2
+pytest-django==4.11.1
