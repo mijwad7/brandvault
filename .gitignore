@@ -17,6 +17,9 @@ frontend/.env
 frontend/node_modules/
 frontend/dist/
 
+# Local notes
+ARCHITECTURE.md
+
 # IDE
 .vscode/
 .idea/
