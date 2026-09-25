@@ -58,3 +58,27 @@ export function createApiClient(getToken: TokenGetter) {
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>
+
+export function getApiErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.body && typeof error.body === 'object') {
+    const body = error.body as Record<string, unknown>
+    if (typeof body.detail === 'string') {
+      return body.detail
+    }
+    const parts: string[] = []
+    for (const [key, value] of Object.entries(body)) {
+      if (Array.isArray(value)) {
+        parts.push(`${key}: ${value.join(', ')}`)
+      } else if (typeof value === 'string') {
+        parts.push(`${key}: ${value}`)
+      }
+    }
+    if (parts.length > 0) {
+      return parts.join(' ')
+    }
+  }
+  if (error instanceof Error) {
+    return error.message
+  }
+  return 'Something went wrong.'
+}
