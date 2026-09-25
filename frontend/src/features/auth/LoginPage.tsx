@@ -37,15 +37,28 @@ export function LoginPage() {
       return
     }
 
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail || !password) {
+      setError('Enter an email and password first.')
+      return
+    }
+
     setPending(true)
     setError('')
-    const { error: authError } =
+    const { data, error: authError } =
       mode === 'signin'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password })
+        ? await supabase.auth.signInWithPassword({
+            email: trimmedEmail,
+            password,
+          })
+        : await supabase.auth.signUp({ email: trimmedEmail, password })
     setPending(false)
     if (authError) {
       setError(authError.message)
+      return
+    }
+    if (mode === 'signup' && !data.session) {
+      setError('Account created. Confirm the email in Supabase, then sign in.')
     }
   }
 
