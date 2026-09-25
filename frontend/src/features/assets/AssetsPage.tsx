@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { getApiErrorMessage } from '../../lib/api.ts'
+import { PageHeader } from '../../components/layout/PageHeader.tsx'
+import { Button } from '../../components/ui/Button.tsx'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog.tsx'
+import { Dialog } from '../../components/ui/Dialog.tsx'
+import { EmptyState } from '../../components/ui/EmptyState.tsx'
+import { FormAlert, TextField } from '../../components/ui/Field.tsx'
+import { Icon, type IconName } from '../../components/ui/icons.tsx'
+import { Skeleton } from '../../components/ui/Skeleton.tsx'
+import { useToast } from '../../components/ui/useToast.ts'
 import { useApi } from '../../hooks/useApi.ts'
-import type { Asset, Folder } from '../../types/index.ts'
+import { getApiErrorMessage, isInlineApiError, readApiErrors } from '../../lib/api.ts'
+import { cn } from '../../lib/cn.ts'
+import type { Asset, AssetType, Folder } from '../../types/index.ts'
 import {
   breadcrumbs,
   childFolders,
@@ -10,12 +19,25 @@ import {
   folderMap,
   MAX_FOLDER_DEPTH,
 } from '../folders/tree.ts'
-import {
-  AssetForm,
-  assetToForm,
-  emptyAssetForm,
-  type AssetFormState,
-} from './AssetForm.tsx'
+import { useSearchParams } from 'react-router-dom'
+import { AssetForm } from './AssetForm.tsx'
+import { assetToForm, emptyAssetForm, type AssetFormState } from './assetFormState.ts'
+
+const typeLabels: Record<AssetType, string> = {
+  image: 'Image',
+  video: 'Video',
+  logo: 'Logo',
+  document: 'Document',
+  font: 'Font',
+}
+
+const typeIcons: Record<AssetType, IconName> = {
+  image: 'image',
+  video: 'film',
+  logo: 'image',
+  document: 'file',
+  font: 'type',
+}
 
 function assetsPath(folderId: string | null, search: string, sort: string): string {
   const params = new URLSearchParams()
@@ -30,8 +52,13 @@ function assetsPath(folderId: string | null, search: string, sort: string): stri
   return `/assets?${params.toString()}`
 }
 
+type ConfirmTarget =
+  | { kind: 'folder'; folder: Folder }
+  | { kind: 'asset'; asset: Asset }
+
 export function AssetsPage() {
   const api = useApi()
+  const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const folderId = searchParams.get('folder')
 
@@ -42,26 +69,36 @@ export function AssetsPage() {
   const [sort, setSort] = useState('updated_desc')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [folderOpen, setFolderOpen] = useState(false)
   const [folderName, setFolderName] = useState('')
+  const [folderError, setFolderError] = useState('')
+  const [folderFieldErrors, setFolderFieldErrors] = useState<Record<string, string>>({})
+  const [folderSaving, setFolderSaving] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Asset | null>(null)
   const [form, setForm] = useState<AssetFormState>(emptyAssetForm)
   const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [confirm, setConfirm] = useState<ConfirmTarget | null>(null)
+  const [confirmError, setConfirmError] = useState('')
+  const [confirmPending, setConfirmPending] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   const byId = useMemo(() => folderMap(folders), [folders])
   const currentFolder = folderId ? (byId.get(folderId) ?? null) : null
   const trail = breadcrumbs(folderId, byId)
   const children = childFolders(folders, folderId)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
   const canCreateFolder = folderDepth(currentFolder, byId) < MAX_FOLDER_DEPTH
 
   async function refreshFolders() {
-    const data = await api.get<Folder[]>('/folders')
-    setFolders(data)
+    setFolders(await api.get<Folder[]>('/folders'))
   }
 
   async function refreshAssets() {
-    const data = await api.get<Asset[]>(assetsPath(folderId, search, sort))
-    setAssets(data)
+    setAssets(await api.get<Asset[]>(assetsPath(folderId, search, sort)))
   }
 
   useEffect(() => {
@@ -92,7 +129,7 @@ export function AssetsPage() {
     return () => {
       cancelled = true
     }
-  }, [api, folderId, search, sort])
+  }, [api, folderId, search, sort, reloadKey])
 
   function openFolder(id: string | null) {
     if (id) {
@@ -104,280 +141,552 @@ export function AssetsPage() {
     setSearchInput('')
   }
 
-  async function createFolder() {
-    const name = folderName.trim()
-    if (!name) {
+  function closeForm() {
+    if (saving) {
       return
     }
-    setError('')
-    try {
-      await api.post<Folder>('/folders', {
-        name,
-        parent: folderId,
-      })
-      setFolderName('')
-      await refreshFolders()
-    } catch (caught) {
-      setError(getApiErrorMessage(caught))
-    }
-  }
-
-  async function removeFolder(folder: Folder) {
-    if (!window.confirm(`Delete folder “${folder.name}”? It must be empty.`)) {
-      return
-    }
-    setError('')
-    try {
-      await api.delete(`/folders/${folder.id}`)
-      await refreshFolders()
-    } catch (caught) {
-      setError(getApiErrorMessage(caught))
-    }
+    setFormOpen(false)
+    setEditing(null)
+    setFormError('')
+    setFieldErrors({})
   }
 
   function openCreate() {
     setEditing(null)
     setForm({ ...emptyAssetForm, folder: folderId ?? '' })
+    setFormError('')
+    setFieldErrors({})
     setFormOpen(true)
   }
 
   function openEdit(asset: Asset) {
     setEditing(asset)
     setForm(assetToForm(asset))
+    setFormError('')
+    setFieldErrors({})
     setFormOpen(true)
+  }
+
+  async function createFolder() {
+    const name = folderName.trim()
+    if (!name) {
+      setFolderError('')
+      setFolderFieldErrors({ name: 'Enter a folder name.' })
+      return
+    }
+    setFolderSaving(true)
+    setFolderError('')
+    setFolderFieldErrors({})
+    try {
+      await api.post<Folder>('/folders', { name, parent: folderId })
+    } catch (caught) {
+      const parsed = readApiErrors(caught)
+      setFolderFieldErrors(parsed.fields)
+      setFolderError(parsed.form)
+      if (!isInlineApiError(caught)) {
+        toast.error(parsed.form || 'Could not create the folder.')
+      }
+      setFolderSaving(false)
+      return
+    }
+    toast.success(`Created folder “${name}”.`)
+    setFolderName('')
+    setFolderOpen(false)
+    setFolderSaving(false)
+    try {
+      await refreshFolders()
+    } catch (caught) {
+      toast.error(getApiErrorMessage(caught))
+    }
   }
 
   async function saveAsset() {
     setSaving(true)
-    setError('')
+    setFormError('')
+    setFieldErrors({})
+    const payload = {
+      name: form.name.trim(),
+      type: form.type,
+      url: form.url.trim(),
+      folder: form.folder || null,
+    }
     try {
-      const payload = {
-        name: form.name.trim(),
-        type: form.type,
-        url: form.url.trim(),
-        folder: form.folder || null,
-      }
       if (editing) {
         await api.patch<Asset>(`/assets/${editing.id}`, payload)
       } else {
         await api.post<Asset>('/assets', payload)
       }
-      setFormOpen(false)
-      setEditing(null)
-      await refreshAssets()
     } catch (caught) {
-      setError(getApiErrorMessage(caught))
-    } finally {
+      const parsed = readApiErrors(caught)
+      setFieldErrors(parsed.fields)
+      setFormError(parsed.form)
+      if (!isInlineApiError(caught)) {
+        toast.error(parsed.form || 'Could not save the asset.')
+      }
       setSaving(false)
-    }
-  }
-
-  async function trashAsset(asset: Asset) {
-    if (!window.confirm(`Move “${asset.name}” to trash?`)) {
       return
     }
-    setError('')
+    toast.success(editing ? `Saved “${payload.name}”.` : `Added “${payload.name}”.`)
+    setSaving(false)
+    setFormOpen(false)
+    setEditing(null)
     try {
-      await api.post(`/assets/${asset.id}/trash`)
       await refreshAssets()
     } catch (caught) {
-      setError(getApiErrorMessage(caught))
+      toast.error(getApiErrorMessage(caught))
     }
   }
 
+  function askConfirm(target: ConfirmTarget) {
+    setConfirmError('')
+    setConfirm(target)
+  }
+
+  async function runConfirm() {
+    if (!confirm) {
+      return
+    }
+    setConfirmPending(true)
+    setConfirmError('')
+    try {
+      if (confirm.kind === 'folder') {
+        await api.delete(`/folders/${confirm.folder.id}`)
+      } else {
+        await api.post(`/assets/${confirm.asset.id}/trash`)
+      }
+    } catch (caught) {
+      const parsed = readApiErrors(caught)
+      setConfirmError(parsed.form || getApiErrorMessage(caught))
+      if (!isInlineApiError(caught)) {
+        toast.error(parsed.form || 'That action failed.')
+      }
+      setConfirmPending(false)
+      return
+    }
+    const message =
+      confirm.kind === 'folder'
+        ? `Deleted folder “${confirm.folder.name}”.`
+        : `Moved “${confirm.asset.name}” to trash.`
+    const kind = confirm.kind
+    toast.success(message)
+    setConfirm(null)
+    setConfirmPending(false)
+    try {
+      if (kind === 'folder') {
+        await refreshFolders()
+      } else {
+        await refreshAssets()
+      }
+    } catch (caught) {
+      toast.error(getApiErrorMessage(caught))
+    }
+  }
+
+  const title = search ? 'Search' : (currentFolder?.name ?? 'Library')
+  const missingFolder = Boolean(folderId) && !loading && !currentFolder && !search
+
   return (
-    <section className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Asset library</h1>
-          <nav className="mt-1 flex flex-wrap gap-1 text-sm text-slate-600">
-            <button className="hover:underline" type="button" onClick={() => openFolder(null)}>
-              Library
-            </button>
-            {trail.map((folder) => (
-              <span key={folder.id} className="flex gap-1">
-                <span>/</span>
-                <button
-                  className="hover:underline"
-                  type="button"
-                  onClick={() => openFolder(folder.id)}
-                >
-                  {folder.name}
-                </button>
-              </span>
-            ))}
-          </nav>
-        </div>
+    <section>
+      <PageHeader
+        title={title}
+        description={
+          search
+            ? 'Results come from the whole workspace, not just this folder.'
+            : 'Folders and files for this workspace. Assets are stored as HTTPS links.'
+        }
+        actions={
+          <Button className="w-full sm:w-auto" onClick={openCreate}>
+            <Icon name="plus" />
+            Add asset
+          </Button>
+        }
+      />
+
+      <nav aria-label="Folder path" className="mt-4 flex items-center gap-1 overflow-x-auto text-sm">
         <button
-          className="rounded bg-slate-900 px-3 py-2 text-sm text-white"
           type="button"
-          onClick={openCreate}
+          className={cn(
+            'shrink-0 rounded-lg px-1.5 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+            folderId ? 'text-muted hover:text-ink' : 'font-medium text-ink',
+          )}
+          onClick={() => openFolder(null)}
         >
-          Add asset
+          Library
         </button>
-      </div>
+        {trail.map((folder, index) => (
+          <span key={folder.id} className="flex shrink-0 items-center gap-1">
+            <Icon name="chevron" className="size-4 text-faint" />
+            <button
+              type="button"
+              className="rounded-lg px-1.5 py-1 font-medium text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              aria-current={index === trail.length - 1 ? 'page' : undefined}
+              onClick={() => openFolder(folder.id)}
+            >
+              {folder.name}
+            </button>
+          </span>
+        ))}
+      </nav>
 
       <form
-        className="mt-4 flex flex-wrap gap-2"
+        className="mt-4 flex flex-col gap-2 sm:flex-row"
         onSubmit={(event) => {
           event.preventDefault()
-          setSearch(searchInput)
+          setSearch(searchInput.trim())
         }}
       >
-        <input
-          className="min-w-56 flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Search by name"
-          aria-label="Search assets"
-        />
-        <select
-          className="rounded border border-slate-300 px-3 py-2 text-sm"
-          value={sort}
-          onChange={(event) => setSort(event.target.value)}
-          aria-label="Sort assets"
-        >
-          <option value="updated_desc">Newest updated</option>
-          <option value="name_asc">Name A–Z</option>
-        </select>
-        <button className="rounded border border-slate-300 px-3 py-2 text-sm" type="submit">
-          Search
-        </button>
+        <div className="relative min-w-0 flex-1">
+          <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
+          <input
+            className="h-11 w-full rounded-xl border border-line bg-surface pr-3 pl-10 text-sm text-ink outline-none placeholder:text-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Search by name"
+            aria-label="Search assets"
+          />
+        </div>
+        <div className="flex gap-2">
+          <select
+            className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:flex-none"
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            aria-label="Sort assets"
+          >
+            <option value="updated_desc">Newest updated</option>
+            <option value="name_asc">Name A–Z</option>
+          </select>
+          <Button type="submit" variant="secondary">
+            Search
+          </Button>
+        </div>
       </form>
 
       {search ? (
-        <p className="mt-2 text-sm text-slate-500">
-          Showing workspace results for “{search}”.{' '}
-          <button className="underline" type="button" onClick={() => { setSearch(''); setSearchInput('') }}>
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-muted-surface px-3 py-2 text-sm">
+          <p className="min-w-0 text-ink">
+            Searching the whole library for “{search}”.
+          </p>
+          <button
+            type="button"
+            className="shrink-0 rounded-lg px-2 py-1 font-medium text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={() => {
+              setSearch('')
+              setSearchInput('')
+            }}
+          >
             Clear
           </button>
-        </p>
+        </div>
       ) : null}
 
-      {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-
-      {formOpen ? (
-        <div className="mt-4 max-w-xl">
-          <AssetForm
-            title={editing ? 'Edit asset' : 'Add asset'}
-            values={form}
-            folders={folders}
-            saving={saving}
-            submitLabel={editing ? 'Save asset' : 'Create asset'}
-            onChange={setForm}
-            onSubmit={() => {
-              void saveAsset()
-            }}
-            onCancel={() => {
-              setFormOpen(false)
-              setEditing(null)
-            }}
+      {loading ? (
+        <LibrarySkeleton />
+      ) : error ? (
+        <div className="mt-6">
+          <EmptyState
+            tone="error"
+            title="Couldn’t load the library"
+            body={error}
+            action={
+              <Button
+                onClick={() => {
+                  setReloadKey((current) => current + 1)
+                }}
+              >
+                Try again
+              </Button>
+            }
           />
         </div>
-      ) : null}
-
-      <div className="mt-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 className="font-medium">Folders</h2>
-          {canCreateFolder ? (
-            <form
-              className="flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void createFolder()
-              }}
-            >
-              <input
-                className="rounded border border-slate-300 px-3 py-2 text-sm"
-                value={folderName}
-                onChange={(event) => setFolderName(event.target.value)}
-                placeholder="New folder name"
-                aria-label="New folder name"
-              />
-              <button className="rounded border border-slate-300 px-3 py-2 text-sm" type="submit">
-                Create folder
-              </button>
-            </form>
+      ) : (
+        <div className="mt-6 space-y-8">
+          {search ? null : missingFolder ? (
+            <EmptyState
+              title="Folder not found"
+              body="That folder is not in this workspace."
+              action={
+                <Button variant="secondary" onClick={() => openFolder(null)}>
+                  Back to library
+                </Button>
+              }
+            />
           ) : (
-            <p className="text-sm text-slate-500">Maximum folder depth reached.</p>
-          )}
-        </div>
-        {children.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No folders here.</p>
-        ) : (
-          <ul className="mt-2 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-            {children.map((folder) => (
-              <li key={folder.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                <button className="text-left font-medium hover:underline" type="button" onClick={() => openFolder(folder.id)}>
-                  {folder.name}
-                </button>
-                <button
-                  className="text-slate-500 hover:text-red-600"
-                  type="button"
-                  onClick={() => {
-                    void removeFolder(folder)
-                  }}
-                >
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="mt-8">
-        <h2 className="font-medium">Assets</h2>
-        {loading ? (
-          <p className="mt-2 text-sm text-slate-500">Loading assets…</p>
-        ) : assets.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">
-            {search ? 'No assets match that search.' : 'No assets in this folder.'}
-          </p>
-        ) : (
-          <ul className="mt-2 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-            {assets.map((asset) => (
-              <li key={asset.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
-                <div>
-                  <p className="font-medium">{asset.name}</p>
-                  <p className="text-sm text-slate-500">
-                    {asset.type}
-                    {asset.url ? (
-                      <>
-                        {' · '}
-                        <a className="underline" href={asset.url} target="_blank" rel="noreferrer">
-                          Open
-                        </a>
-                      </>
-                    ) : null}
-                  </p>
-                </div>
-                <div className="flex gap-2 text-sm">
-                  <button
-                    className="rounded border border-slate-300 px-2 py-1"
-                    type="button"
-                    onClick={() => openEdit(asset)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="rounded border border-slate-300 px-2 py-1"
-                    type="button"
+            <section>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="font-serif text-2xl tracking-tight">Folders</h2>
+                {canCreateFolder ? (
+                  <Button
+                    variant="secondary"
+                    className="w-full sm:w-auto"
                     onClick={() => {
-                      void trashAsset(asset)
+                      setFolderName('')
+                      setFolderError('')
+                      setFolderFieldErrors({})
+                      setFolderOpen(true)
                     }}
                   >
-                    Trash
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-3 text-sm text-slate-500">
-          Trashed assets live in <Link className="underline" to="/trash">Trash</Link>.
-        </p>
-      </div>
+                    <Icon name="plus" />
+                    New folder
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted">Folders can go three levels deep. This one is full.</p>
+                )}
+              </div>
+              {children.length === 0 ? (
+                <p className="mt-3 text-sm text-muted">No folders here.</p>
+              ) : (
+                <ul className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
+                  {children.map((folder) => (
+                    <li key={folder.id}>
+                      <div className="flex items-center gap-1 rounded-2xl border border-line bg-surface p-2">
+                        <button
+                          type="button"
+                          className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          onClick={() => openFolder(folder.id)}
+                        >
+                          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted-surface text-ink">
+                            <Icon name="folder" />
+                          </span>
+                          <span className="truncate font-medium">{folder.name}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="grid size-11 shrink-0 place-items-center rounded-xl text-muted hover:bg-danger-soft hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          aria-label={`Delete folder ${folder.name}`}
+                          onClick={() => askConfirm({ kind: 'folder', folder })}
+                        >
+                          <Icon name="trash" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {missingFolder ? null : (
+          <section aria-live="polite">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-serif text-2xl tracking-tight">Assets</h2>
+              <p className="text-sm text-muted">
+                {assets.length} {assets.length === 1 ? 'asset' : 'assets'}
+              </p>
+            </div>
+            {assets.length === 0 ? (
+              <div className="mt-3">
+                <EmptyState
+                  title={search ? 'No matches' : 'Nothing in this folder'}
+                  body={
+                    search
+                      ? `Nothing in the library is named like “${search}”.`
+                      : 'Add an HTTPS asset, or open a folder that already has some.'
+                  }
+                  action={
+                    search ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setSearch('')
+                          setSearchInput('')
+                        }}
+                      >
+                        Clear search
+                      </Button>
+                    ) : (
+                      <Button onClick={openCreate}>
+                        <Icon name="plus" />
+                        Add asset
+                      </Button>
+                    )
+                  }
+                />
+              </div>
+            ) : (
+              <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {assets.map((asset) => (
+                  <li key={asset.id}>
+                    <article className="overflow-hidden rounded-2xl border border-line bg-surface">
+                      <AssetVisual asset={asset} />
+                      <div className="space-y-3 p-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate font-medium text-ink">{asset.name}</h3>
+                          <p className="mt-0.5 text-xs font-medium tracking-wide text-muted uppercase">
+                            {typeLabels[asset.type]}
+                          </p>
+                        </div>
+                        {asset.url ? (
+                          <a
+                            href={asset.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            Open link
+                            <Icon name="external" className="size-3.5" />
+                          </a>
+                        ) : null}
+                        <div className="flex gap-2">
+                          <Button variant="secondary" size="sm" className="flex-1" onClick={() => openEdit(asset)}>
+                            Edit
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => askConfirm({ kind: 'asset', asset })}
+                          >
+                            Trash
+                          </Button>
+                        </div>
+                      </div>
+                    </article>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          )}
+        </div>
+      )}
+
+      <Dialog
+        open={folderOpen}
+        title="New folder"
+        description={
+          currentFolder
+            ? `Inside “${currentFolder.name}”. Names must be unique among siblings.`
+            : 'At the library root. Names must be unique among siblings.'
+        }
+        onClose={() => {
+          if (!folderSaving) {
+            setFolderOpen(false)
+          }
+        }}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void createFolder()
+          }}
+        >
+          <TextField
+            label="Folder name"
+            value={folderName}
+            onChange={(event) => setFolderName(event.target.value)}
+            error={folderFieldErrors.name}
+            data-autofocus=""
+            required
+          />
+          <FormAlert message={folderError} />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="submit" className="w-full" disabled={folderSaving}>
+              {folderSaving ? 'Creating…' : 'Create folder'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              disabled={folderSaving}
+              onClick={() => setFolderOpen(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog
+        open={formOpen}
+        variant="sheet"
+        title={editing ? 'Edit asset' : 'Add asset'}
+        description={editing ? 'Update the name, type, link, or folder.' : 'Add an asset with an HTTPS link.'}
+        onClose={closeForm}
+      >
+        <AssetForm
+          values={form}
+          folders={folders}
+          saving={saving}
+          error={formError}
+          fieldErrors={fieldErrors}
+          submitLabel={editing ? 'Save asset' : 'Create asset'}
+          onChange={setForm}
+          onSubmit={() => {
+            void saveAsset()
+          }}
+          onCancel={closeForm}
+        />
+      </Dialog>
+
+      <ConfirmDialog
+        open={confirm !== null}
+        title={
+          confirm?.kind === 'folder'
+            ? `Delete “${confirm.folder.name}”?`
+            : confirm?.kind === 'asset'
+              ? `Move “${confirm.asset.name}” to trash?`
+              : 'Confirm'
+        }
+        description={
+          confirm?.kind === 'folder'
+            ? 'This only works when the folder is empty. Move assets and subfolders out first.'
+            : 'You can restore it later from Trash.'
+        }
+        confirmLabel={confirm?.kind === 'folder' ? 'Delete folder' : 'Move to trash'}
+        pending={confirmPending}
+        error={confirmError}
+        onConfirm={() => {
+          void runConfirm()
+        }}
+        onClose={() => {
+          if (!confirmPending) {
+            setConfirm(null)
+          }
+        }}
+      />
     </section>
+  )
+}
+
+function LibrarySkeleton() {
+  return (
+    <div className="mt-6 space-y-6">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
+        <Skeleton className="h-16" />
+        <Skeleton className="h-16" />
+        <Skeleton className="h-16" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <Skeleton className="h-56" />
+        <Skeleton className="h-56" />
+        <Skeleton className="h-56" />
+      </div>
+    </div>
+  )
+}
+
+function AssetVisual({ asset }: { asset: Asset }) {
+  const [failed, setFailed] = useState(false)
+  const showImage = (asset.type === 'image' || asset.type === 'logo') && Boolean(asset.url) && !failed
+
+  return (
+    <div className="relative aspect-[16/10] overflow-hidden bg-muted-surface">
+      {showImage ? (
+        <img
+          src={asset.url}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="grid h-full place-items-center text-faint">
+          <Icon name={typeIcons[asset.type]} className="size-8" />
+        </div>
+      )}
+      <span className="absolute top-2 left-2 rounded-full bg-surface/90 px-2 py-0.5 text-xs font-medium text-ink">
+        {typeLabels[asset.type]}
+      </span>
+    </div>
   )
 }

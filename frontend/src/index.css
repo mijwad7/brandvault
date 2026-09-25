@@ -1,7 +1,149 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --bv-bg: #f3efe7;
+  --bv-surface: #fffdf8;
+  --bv-muted-surface: #ebe4d8;
+  --bv-ink: #1c1915;
+  --bv-muted: #5c564c;
+  --bv-faint: #6f675c;
+  --bv-line: #e3dacd;
+  --bv-accent: #1e4d3a;
+  --bv-accent-ink: #f6f1e7;
+  --bv-clay: #c46a45;
+  --bv-danger: #8d2f2a;
+  --bv-danger-ink: #fff8f6;
+  --bv-danger-soft: #f8e7e4;
+  --bv-ok: #1d6b45;
+  --bv-ok-soft: #e4f3ea;
+}
+
+.dark {
+  color-scheme: dark;
+  --bv-bg: #12110e;
+  --bv-surface: #1c1a16;
+  --bv-muted-surface: #2a261f;
+  --bv-ink: #f4efe6;
+  --bv-muted: #c4baad;
+  --bv-faint: #9a9084;
+  --bv-line: #343027;
+  --bv-accent: #e0b36a;
+  --bv-accent-ink: #1c1408;
+  --bv-clay: #d98962;
+  --bv-danger: #f0b0a8;
+  --bv-danger-ink: #2c1412;
+  --bv-danger-soft: #3a2422;
+  --bv-ok: #9ed7b4;
+  --bv-ok-soft: #1a2e24;
+}
+
+@theme inline {
+  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Fraunces', ui-serif, Georgia, serif;
+  --color-bg: var(--bv-bg);
+  --color-surface: var(--bv-surface);
+  --color-muted-surface: var(--bv-muted-surface);
+  --color-ink: var(--bv-ink);
+  --color-muted: var(--bv-muted);
+  --color-faint: var(--bv-faint);
+  --color-line: var(--bv-line);
+  --color-accent: var(--bv-accent);
+  --color-accent-ink: var(--bv-accent-ink);
+  --color-clay: var(--bv-clay);
+  --color-danger: var(--bv-danger);
+  --color-danger-ink: var(--bv-danger-ink);
+  --color-danger-soft: var(--bv-danger-soft);
+  --color-ok: var(--bv-ok);
+  --color-ok-soft: var(--bv-ok-soft);
+}
+
+@layer base {
+  a[href],
+  button:not(:disabled),
+  select,
+  summary,
+  label[for],
+  input[type='color'],
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'],
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+}
+
 body {
   margin: 0;
   min-height: 100svh;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bv-bg);
+  background-image: radial-gradient(
+    1100px 480px at 0% -10%,
+    color-mix(in srgb, var(--bv-accent) 16%, transparent),
+    transparent 60%
+  );
+  color: var(--bv-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--bv-accent);
+  color: var(--bv-accent-ink);
+}
+
+@keyframes bv-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bv-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bv-sheet-side {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bv-dialog {
+  animation: bv-pop 160ms ease-out;
+}
+
+.bv-sheet {
+  animation: bv-sheet-up 180ms ease-out;
+}
+
+@media (min-width: 768px) {
+  .bv-sheet {
+    animation-name: bv-sheet-side;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bv-dialog,
+  .bv-sheet {
+    animation: none;
+  }
 }

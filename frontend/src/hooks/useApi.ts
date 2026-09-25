@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useAuth } from '../features/auth/AuthProvider.tsx'
+import { useAuth } from '../features/auth/useAuth.ts'
 import { createApiClient } from '../lib/api.ts'
 
 export function useApi() {

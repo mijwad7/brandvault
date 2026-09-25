@@ -1,8 +1,17 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { ApiError, getApiErrorMessage } from '../../lib/api.ts'
+import { useState, type FormEvent } from 'react'
+import { PageHeader } from '../../components/layout/PageHeader.tsx'
+import { Button } from '../../components/ui/Button.tsx'
+import { EmptyState } from '../../components/ui/EmptyState.tsx'
+import { controlClass, FormAlert, TextField } from '../../components/ui/Field.tsx'
+import { Skeleton } from '../../components/ui/Skeleton.tsx'
+import { useToast } from '../../components/ui/useToast.ts'
 import { useApi } from '../../hooks/useApi.ts'
+import { isInlineApiError, readApiErrors } from '../../lib/api.ts'
+import { cn } from '../../lib/cn.ts'
+import { pickerValue } from '../../lib/color.ts'
 import type { Brand } from '../../types/index.ts'
 import { BrandPreview } from './BrandPreview.tsx'
+import { useBrandKit } from './useBrandKit.ts'
 
 type BrandFormState = {
   name: string
@@ -30,162 +39,155 @@ function toForm(brand: Brand): BrandFormState {
   }
 }
 
-function pickerValue(hex: string): string {
-  if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-    return hex
-  }
-  if (/^#[0-9A-Fa-f]{3}$/.test(hex)) {
-    const r = hex[1]
-    const g = hex[2]
-    const b = hex[3]
-    return `#${r}${r}${g}${g}${b}${b}`
-  }
-  return '#000000'
-}
-
 export function BrandPage() {
   const api = useApi()
-  const [form, setForm] = useState<BrandFormState>(emptyForm)
-  const [existing, setExisting] = useState<Brand | null>(null)
-  const [loading, setLoading] = useState(true)
+  const kit = useBrandKit()
+  const toast = useToast()
+  const [draft, setDraft] = useState<BrandFormState | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setLoading(true)
-      setError('')
-      try {
-        const brand = await api.get<Brand>('/brand')
-        if (!cancelled) {
-          setExisting(brand)
-          setForm(toForm(brand))
-        }
-      } catch (caught) {
-        if (cancelled) {
-          return
-        }
-        if (caught instanceof ApiError && caught.status === 404) {
-          setExisting(null)
-          setForm(emptyForm)
-        } else {
-          setError(getApiErrorMessage(caught))
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [api])
+  const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const form = draft ?? (kit.brand ? toForm(kit.brand) : emptyForm)
 
   function update<K extends keyof BrandFormState>(key: K, value: BrandFormState[K]) {
-    setForm((current) => ({ ...current, [key]: value }))
+    setDraft((current) => ({ ...(current ?? form), [key]: value }))
+    setFieldErrors((current) => {
+      if (!current[key]) {
+        return current
+      }
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSaving(true)
-    setError('')
-    setNotice('')
+    setFormError('')
+    setFieldErrors({})
+    const payload = {
+      name: form.name.trim(),
+      primary_color: form.primary_color.trim(),
+      secondary_color: form.secondary_color.trim(),
+      logo_url: form.logo_url.trim(),
+      default_font: form.default_font.trim(),
+    }
     try {
-      const payload = {
-        name: form.name.trim(),
-        primary_color: form.primary_color.trim(),
-        secondary_color: form.secondary_color.trim(),
-        logo_url: form.logo_url.trim(),
-        default_font: form.default_font.trim(),
-      }
-      const brand = existing
+      const saved = kit.brand
         ? await api.patch<Brand>('/brand', payload)
         : await api.post<Brand>('/brand', payload)
-      setExisting(brand)
-      setForm(toForm(brand))
-      setNotice(existing ? 'Brand kit updated.' : 'Brand kit created.')
+      kit.setBrand(saved)
+      setDraft(null)
+      toast.success(kit.brand ? 'Brand kit saved.' : 'Brand kit created.')
     } catch (caught) {
-      setError(getApiErrorMessage(caught))
+      const parsed = readApiErrors(caught)
+      setFieldErrors(parsed.fields)
+      setFormError(parsed.form)
+      if (!isInlineApiError(caught)) {
+        toast.error(parsed.form || 'Could not save the brand kit.')
+      }
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
-    return <p className="p-6 text-sm text-slate-500">Loading brand kit…</p>
+  if (kit.error) {
+    return (
+      <EmptyState
+        tone="error"
+        title="Couldn’t load the brand kit"
+        body={kit.error}
+        action={
+          <Button
+            onClick={() => {
+              setDraft(null)
+              void kit.refresh()
+            }}
+          >
+            Try again
+          </Button>
+        }
+      />
+    )
   }
 
-  return (
-    <section className="p-6">
-      <h1 className="text-xl font-semibold">Brand kit</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        {existing
-          ? 'Update the brand profile for this workspace.'
-          : 'No brand kit yet. Create one to get started.'}
-      </p>
+  if (kit.loading) {
+    return (
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <Skeleton className="h-96" />
+        <Skeleton className="h-72" />
+      </div>
+    )
+  }
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <form className="space-y-4 rounded-lg border border-slate-200 bg-white p-5" onSubmit={onSubmit}>
-          <label className="block text-sm">
-            Brand name
-            <input
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
-              value={form.name}
-              onChange={(event) => update('name', event.target.value)}
-              required
-            />
-          </label>
+  const existing = kit.brand
+
+  return (
+    <section>
+      <PageHeader
+        title="Brand kit"
+        description={
+          existing
+            ? 'Colors, type, and logo for this workspace. The preview updates as you edit.'
+            : 'No brand kit yet. Create one and it will show up in the app chrome.'
+        }
+      />
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <form
+          className="space-y-4 rounded-3xl border border-line bg-surface p-4 shadow-sm sm:p-5"
+          onSubmit={(event) => {
+            void onSubmit(event)
+          }}
+        >
+          <TextField
+            label="Brand name"
+            value={form.name}
+            onChange={(event) => update('name', event.target.value)}
+            error={fieldErrors.name}
+            required
+          />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <ColorField
               label="Primary color"
               value={form.primary_color}
+              error={fieldErrors.primary_color}
               onChange={(value) => update('primary_color', value)}
             />
             <ColorField
               label="Secondary color"
               value={form.secondary_color}
+              error={fieldErrors.secondary_color}
               onChange={(value) => update('secondary_color', value)}
             />
           </div>
 
-          <label className="block text-sm">
-            Default font
-            <input
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
-              value={form.default_font}
-              onChange={(event) => update('default_font', event.target.value)}
-              placeholder="Inter"
-            />
-          </label>
+          <TextField
+            label="Default font"
+            value={form.default_font}
+            onChange={(event) => update('default_font', event.target.value)}
+            error={fieldErrors.default_font}
+            placeholder="Fraunces"
+            hint="A font name already installed on this device, or a generic family."
+          />
 
-          <label className="block text-sm">
-            Logo URL
-            <input
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
-              type="url"
-              value={form.logo_url}
-              onChange={(event) => update('logo_url', event.target.value)}
-              placeholder="https://"
-            />
-          </label>
+          <TextField
+            label="Logo URL"
+            type="url"
+            value={form.logo_url}
+            onChange={(event) => update('logo_url', event.target.value)}
+            error={fieldErrors.logo_url}
+            placeholder="https://"
+            hint="HTTPS only."
+          />
 
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
+          <FormAlert message={formError} />
 
-          <button
-            className="rounded bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-            type="submit"
-            disabled={saving}
-          >
+          <Button type="submit" disabled={saving} className="w-full sm:w-auto">
             {saving ? 'Saving…' : existing ? 'Save changes' : 'Create brand kit'}
-          </button>
+          </Button>
         </form>
 
         <BrandPreview
@@ -203,30 +205,43 @@ export function BrandPage() {
 function ColorField({
   label,
   value,
+  error,
   onChange,
 }: {
   label: string
   value: string
+  error?: string
   onChange: (value: string) => void
 }) {
+  const hintId = `${label}-hint`
   return (
-    <label className="block text-sm">
-      {label}
-      <span className="mt-1 flex items-center gap-2">
+    <div>
+      <span className="mb-1.5 block text-sm font-medium text-ink">{label}</span>
+      <span className="flex items-center gap-2">
         <input
-          className="h-10 w-10 cursor-pointer rounded border border-slate-300 bg-white"
+          className="h-11 w-14 cursor-pointer rounded-xl border border-line bg-surface p-1"
           type="color"
           value={pickerValue(value)}
           onChange={(event) => onChange(event.target.value.toUpperCase())}
           aria-label={`${label} picker`}
         />
         <input
-          className="w-full rounded border border-slate-300 px-3 py-2 font-mono"
+          className={cn(controlClass, 'font-mono uppercase', error && 'border-danger')}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="#AABBCC"
+          placeholder="#1E4D3A"
+          aria-label={`${label} hex`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? hintId : undefined}
+          spellCheck={false}
+          maxLength={7}
         />
       </span>
-    </label>
+      {error ? (
+        <p id={hintId} className="mt-1.5 text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+    </div>
   )
 }

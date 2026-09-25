@@ -1,18 +1,23 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
+import { FullScreenStatus } from '../../components/layout/FullScreenStatus.tsx'
+import { ThemeToggle } from '../../components/theme/ThemeToggle.tsx'
+import { Button } from '../../components/ui/Button.tsx'
+import { FormAlert, TextField } from '../../components/ui/Field.tsx'
+import { Mark } from '../../components/ui/Mark.tsx'
 import { isSupabaseConfigured } from '../../lib/env.ts'
 import { getSupabase } from '../../lib/supabase.ts'
-import { useAuth } from './AuthProvider.tsx'
+import { useAuth } from './useAuth.ts'
 
 export function LoginPage() {
   const { session, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [pending, setPending] = useState(false)
+  const [pending, setPending] = useState<'signin' | 'signup' | null>(null)
 
   if (loading) {
-    return <p className="p-6 text-sm text-slate-500">Loading session…</p>
+    return <FullScreenStatus label="Checking your session" />
   }
 
   if (session) {
@@ -21,11 +26,12 @@ export function LoginPage() {
 
   if (!isSupabaseConfigured()) {
     return (
-      <main className="mx-auto max-w-md p-8">
-        <h1 className="text-2xl font-semibold">BrandVault</h1>
-        <p className="mt-4 text-sm text-slate-600">
-          Supabase Auth is not configured. Add `VITE_SUPABASE_URL` and
-          `VITE_SUPABASE_ANON_KEY` to `frontend/.env`.
+      <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center bg-bg px-6 text-ink">
+        <Mark />
+        <h1 className="mt-4 font-serif text-3xl tracking-tight">BrandVault</h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted">
+          Supabase Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to
+          frontend/.env, then restart the dev server.
         </p>
       </main>
     )
@@ -43,7 +49,7 @@ export function LoginPage() {
       return
     }
 
-    setPending(true)
+    setPending(mode)
     setError('')
     const { data, error: authError } =
       mode === 'signin'
@@ -52,7 +58,7 @@ export function LoginPage() {
             password,
           })
         : await supabase.auth.signUp({ email: trimmedEmail, password })
-    setPending(false)
+    setPending(null)
     if (authError) {
       setError(authError.message)
       return
@@ -68,51 +74,77 @@ export function LoginPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md p-8">
-      <h1 className="text-2xl font-semibold">BrandVault</h1>
-      <p className="mt-2 text-sm text-slate-600">Sign in to your workspace.</p>
-      <form className="mt-6 space-y-3" onSubmit={onSubmit}>
-        <label className="block text-sm">
-          Email
-          <input
-            className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
-        <label className="block text-sm">
-          Password
-          <input
-            className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        <div className="flex gap-2">
-          <button
-            className="rounded bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-            type="submit"
-            disabled={pending}
+    <main className="relative min-h-svh bg-bg text-ink">
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
+      <div className="mx-auto grid min-h-svh max-w-6xl md:grid-cols-2">
+        <section className="flex flex-col justify-end px-6 pt-20 pb-6 md:justify-center md:px-12 md:py-16">
+          <div className="flex items-center gap-2.5">
+            <Mark />
+            <p className="text-sm font-medium tracking-wide text-muted">BrandVault</p>
+          </div>
+          <h1 className="mt-5 max-w-md font-serif text-4xl leading-[1.05] tracking-tight md:text-5xl">
+            A library for the brand, not a pile of files.
+          </h1>
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted">
+            One workspace. The brand kit, folders, and assets live here together.
+          </p>
+          <div className="mt-10 hidden items-end gap-3 md:flex" aria-hidden="true">
+            <div className="h-28 w-16 rounded-2xl bg-accent" />
+            <div className="h-20 w-16 rounded-2xl bg-clay" />
+            <div className="h-24 w-14 rounded-2xl border border-line bg-surface" />
+          </div>
+        </section>
+
+        <section className="flex items-start px-4 pb-10 md:items-center md:px-10">
+          <form
+            className="w-full rounded-3xl border border-line bg-surface p-5 shadow-xl md:p-8"
+            onSubmit={onSubmit}
           >
-            Sign in
-          </button>
-          <button
-            className="rounded border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
-            type="button"
-            disabled={pending}
-            onClick={() => {
-              void authenticate('signup')
-            }}
-          >
-            Sign up
-          </button>
-        </div>
-      </form>
+            <h2 className="font-serif text-2xl tracking-tight">Sign in</h2>
+            <p className="mt-1 text-sm text-muted">Use your workspace email and password.</p>
+            <div className="mt-6 space-y-4">
+              <TextField
+                label="Email"
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                aria-invalid={error ? true : undefined}
+              />
+              <TextField
+                label="Password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                aria-invalid={error ? true : undefined}
+              />
+              <FormAlert message={error} />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button className="w-full" type="submit" disabled={pending !== null}>
+                  {pending === 'signin' ? 'Signing in…' : 'Sign in'}
+                </Button>
+                <Button
+                  className="w-full"
+                  variant="secondary"
+                  disabled={pending !== null}
+                  onClick={() => {
+                    void authenticate('signup')
+                  }}
+                >
+                  {pending === 'signup' ? 'Creating account…' : 'Sign up'}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </section>
+      </div>
     </main>
   )
 }
