@@ -6,3 +6,4 @@ psycopg[binary]==3.3.2
 PyJWT[crypto]==2.11.0
 pytest==9.0.2
 pytest-django==4.11.1
+google-genai==2.25.0

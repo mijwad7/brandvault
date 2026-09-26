@@ -25,6 +25,8 @@ Without `DATABASE_URL`, Django uses local SQLite in `DEBUG` only so the API can 
 
 Without Supabase URL/JWT settings, the API starts but authenticated routes return 401. There is no placeholder auth bypass.
 
+Gemini is backend-only and optional at boot. Leave `GEMINI_API_KEY` empty and the API still starts.
+
 ## Useful commands
 
 ```
