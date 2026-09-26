@@ -23,7 +23,8 @@ import { useSearchParams } from 'react-router-dom'
 import { TagReviewDialog } from '../ai/TagReviewDialog.tsx'
 import type { AISuggestion } from '../ai/types.ts'
 import { AssetForm } from './AssetForm.tsx'
-import { assetToForm, emptyAssetForm, type AssetFormState } from './assetFormState.ts'
+import { assetFormProblems, assetToForm, emptyAssetForm, type AssetFormState } from './assetFormState.ts'
+import { persistAsset } from './persistAsset.ts'
 
 const typeLabels: Record<AssetType, string> = {
   image: 'Image',
@@ -208,21 +209,18 @@ export function AssetsPage() {
   }
 
   async function saveAsset() {
+    const problems = assetFormProblems(form, Boolean(editing?.storage_path))
+    if (Object.keys(problems).length > 0) {
+      setFieldErrors(problems)
+      setFormError('')
+      return
+    }
     setSaving(true)
     setFormError('')
     setFieldErrors({})
-    const payload = {
-      name: form.name.trim(),
-      type: form.type,
-      url: form.url.trim(),
-      folder: form.folder || null,
-    }
+    const label = form.name.trim()
     try {
-      if (editing) {
-        await api.patch<Asset>(`/assets/${editing.id}`, payload)
-      } else {
-        await api.post<Asset>('/assets', payload)
-      }
+      await persistAsset(api, form, editing)
     } catch (caught) {
       const parsed = readApiErrors(caught)
       setFieldErrors(parsed.fields)
@@ -233,7 +231,7 @@ export function AssetsPage() {
       setSaving(false)
       return
     }
-    toast.success(editing ? `Saved “${payload.name}”.` : `Added “${payload.name}”.`)
+    toast.success(editing ? `Saved “${label}”.` : `Added “${label}”.`)
     setSaving(false)
     setFormOpen(false)
     setEditing(null)
@@ -346,7 +344,7 @@ export function AssetsPage() {
         description={
           search
             ? 'Results come from the whole workspace, not just this folder.'
-            : 'Folders and files for this workspace. Assets are stored as HTTPS links.'
+            : 'Folders and files for this workspace. Upload a file or paste an HTTPS link.'
         }
         actions={
           <Button className="w-full sm:w-auto" onClick={openCreate}>
@@ -534,7 +532,7 @@ export function AssetsPage() {
                   body={
                     search
                       ? `Nothing in the library is named like “${search}”.`
-                      : 'Add an HTTPS asset, or open a folder that already has some.'
+                      : 'Upload a file or paste an HTTPS link, or open a folder that already has assets.'
                   }
                   action={
                     search ? (
@@ -687,7 +685,11 @@ export function AssetsPage() {
         open={formOpen}
         variant="sheet"
         title={editing ? 'Edit asset' : 'Add asset'}
-        description={editing ? 'Update the name, type, link, or folder.' : 'Add an asset with an HTTPS link.'}
+        description={
+          editing
+            ? 'Update the name, type, file, link, or folder.'
+            : 'Upload a file, or paste an HTTPS link.'
+        }
         onClose={closeForm}
       >
         <AssetForm
@@ -697,6 +699,9 @@ export function AssetsPage() {
           error={formError}
           fieldErrors={fieldErrors}
           submitLabel={editing ? 'Save asset' : 'Create asset'}
+          storedFileName={
+            editing?.storage_path ? editing.storage_path.split('/').pop() ?? '' : ''
+          }
           onChange={setForm}
           onSubmit={() => {
             void saveAsset()

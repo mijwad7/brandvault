@@ -1,8 +1,12 @@
+import re
+
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.exceptions import APIException
 
 from library.models import MAX_FOLDER_DEPTH, Asset, Folder
+
+_FILENAME_PART = re.compile(r"[^A-Za-z0-9_-]+")
 
 
 class FolderNotEmpty(APIException):
@@ -46,8 +50,41 @@ def is_in_subtree(folder: Folder, other: Folder) -> bool:
     return False
 
 
-def workspace_storage_prefix(workspace_id) -> str:
-    return f"workspaces/{workspace_id}/"
+def workspace_storage_prefix(supabase_user_id) -> str:
+    """Storage object prefix scoped by the Supabase Auth user id.
+
+    Storage RLS can read auth.uid(). It cannot read the Django workspace UUID.
+    Asset and brand rows are still filtered by workspace in Postgres.
+    """
+    return f"workspaces/{supabase_user_id}/"
+
+
+def safe_storage_filename(filename: str) -> str:
+    raw = str(filename or "").replace("\\", "/").split("/")[-1].strip()
+    if raw in {"", ".", ".."}:
+        raise ValidationError({"filename": "Enter a file name."})
+    stem, dot, ext = raw.rpartition(".")
+    if not dot:
+        stem, ext = raw, ""
+
+    def clean(part: str) -> str:
+        cleaned = _FILENAME_PART.sub("_", part)
+        return re.sub(r"_+", "_", cleaned).strip("_")
+
+    stem_clean = clean(stem)
+    ext_clean = clean(ext).lower()
+    if ext_clean:
+        name = f"{stem_clean or 'file'}.{ext_clean}"
+    else:
+        name = stem_clean
+    if not name:
+        raise ValidationError({"filename": "Enter a file name."})
+    return name[:180]
+
+
+def build_asset_storage_path(*, supabase_user_id, asset_id, filename: str) -> str:
+    safe = safe_storage_filename(filename)
+    return f"{workspace_storage_prefix(supabase_user_id)}assets/{asset_id}/{safe}"
 
 
 def validate_folder_parent(*, workspace, folder: Folder | None, parent: Folder | None) -> None:
@@ -72,11 +109,15 @@ def validate_asset_folder(*, workspace, folder: Folder | None) -> None:
         raise ValidationError({"folder": "Folder is not in this workspace."})
 
 
-def validate_storage_path(*, workspace, storage_path: str) -> None:
+def validate_storage_path(*, supabase_user_id, storage_path: str) -> None:
     if not storage_path:
         return
-    prefix = workspace_storage_prefix(workspace.id)
-    if not storage_path.startswith(prefix):
+    prefix = workspace_storage_prefix(supabase_user_id)
+    parts = storage_path.split("/")
+    if (
+        not storage_path.startswith(prefix)
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
         raise ValidationError(
             {"storage_path": f"storage_path must start with {prefix}"}
         )

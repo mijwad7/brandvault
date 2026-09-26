@@ -1,3 +1,11 @@
+export type Me = {
+  email: string
+  workspace_id: string
+  supabase_user_id: string
+  storage_bucket: string
+  storage_prefix: string
+}
+
 export type Brand = {
   id: string
   name: string
