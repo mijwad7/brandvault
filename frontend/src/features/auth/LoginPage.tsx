@@ -9,12 +9,16 @@ import { isSupabaseConfigured } from '../../lib/env.ts'
 import { getSupabase } from '../../lib/supabase.ts'
 import { useAuth } from './useAuth.ts'
 
+// Published assignment demo account. Django still requires the Supabase JWT.
+const DEMO_EMAIL = 'demo@brandvault.dev'
+const DEMO_PASSWORD = 'Demo1234!'
+
 export function LoginPage() {
   const { session, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [pending, setPending] = useState<'signin' | 'signup' | null>(null)
+  const [pending, setPending] = useState<'signin' | 'signup' | 'demo' | 'google' | null>(null)
 
   if (loading) {
     return <FullScreenStatus label="Checking your session" />
@@ -65,6 +69,73 @@ export function LoginPage() {
     }
     if (mode === 'signup' && !data.session) {
       setError('Account created. Confirm the email in Supabase, then sign in.')
+    }
+  }
+
+  async function continueAsDemo() {
+    const supabase = getSupabase()
+    if (!supabase) {
+      return
+    }
+    setPending('demo')
+    setError('')
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: DEMO_EMAIL,
+      password: DEMO_PASSWORD,
+    })
+    setPending(null)
+    if (authError) {
+      setError(authError.message)
+    }
+  }
+
+  async function continueWithGoogle() {
+    const supabase = getSupabase()
+    if (!supabase) {
+      return
+    }
+    setPending('google')
+    setError('')
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          skipBrowserRedirect: true,
+        },
+      })
+      if (authError) {
+        setError(authError.message)
+        setPending(null)
+        return
+      }
+      if (!data.url) {
+        setError('Google sign-in did not return a redirect.')
+        setPending(null)
+        return
+      }
+      const probe = await fetch(data.url, { redirect: 'manual' })
+      if (probe.type === 'opaqueredirect' || (probe.status >= 300 && probe.status < 400)) {
+        window.location.assign(data.url)
+        return
+      }
+      if (!probe.ok) {
+        const body: unknown = await probe.json().catch(() => null)
+        const raw =
+          body && typeof body === 'object' && 'msg' in body && typeof body.msg === 'string'
+            ? body.msg
+            : 'Google sign-in is not available. Enable the Google provider in Supabase.'
+        const message = raw.toLowerCase().includes('not enabled')
+          ? 'Google sign-in is not enabled. Turn on the Google provider in Supabase.'
+          : raw
+        setError(message)
+        setPending(null)
+        return
+      }
+      window.location.assign(data.url)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Google sign-in failed.')
+      setPending(null)
     }
   }
 
@@ -141,6 +212,31 @@ export function LoginPage() {
                   {pending === 'signup' ? 'Creating account…' : 'Sign up'}
                 </Button>
               </div>
+              <div className="flex items-center gap-3 text-xs text-muted">
+                <span className="h-px flex-1 bg-line" />
+                or
+                <span className="h-px flex-1 bg-line" />
+              </div>
+              <Button
+                className="w-full"
+                variant="secondary"
+                disabled={pending !== null}
+                onClick={() => {
+                  void continueAsDemo()
+                }}
+              >
+                {pending === 'demo' ? 'Signing in…' : 'Continue as demo'}
+              </Button>
+              <Button
+                className="w-full"
+                variant="secondary"
+                disabled={pending !== null}
+                onClick={() => {
+                  void continueWithGoogle()
+                }}
+              >
+                {pending === 'google' ? 'Redirecting…' : 'Continue with Google'}
+              </Button>
             </div>
           </form>
         </section>
