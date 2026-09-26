@@ -584,6 +584,12 @@ export function AssetsPage() {
                         {asset.description ? (
                           <p className="line-clamp-2 text-sm text-muted">{asset.description}</p>
                         ) : null}
+                        {asset.usage_suggestion ? (
+                          <p className="line-clamp-2 text-sm text-ink">
+                            <span className="font-medium">Use: </span>
+                            {asset.usage_suggestion}
+                          </p>
+                        ) : null}
                         {asset.url ? (
                           <a
                             href={asset.url}

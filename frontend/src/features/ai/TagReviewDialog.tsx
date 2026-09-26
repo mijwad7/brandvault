@@ -83,11 +83,12 @@ export function TagReviewDialog({
           submit()
         }}
       >
-        {asset && (asset.tags.length > 0 || asset.description) ? (
+        {asset && (asset.tags.length > 0 || asset.description || asset.usage_suggestion) ? (
           <div className="rounded-xl bg-muted-surface px-3 py-2 text-sm text-muted">
             <p className="font-medium text-ink">Current</p>
             {asset.tags.length > 0 ? <p className="mt-1">{asset.tags.join(', ')}</p> : null}
             {asset.description ? <p className="mt-1">{asset.description}</p> : null}
+            {asset.usage_suggestion ? <p className="mt-1">Use: {asset.usage_suggestion}</p> : null}
           </div>
         ) : null}
         <TextField

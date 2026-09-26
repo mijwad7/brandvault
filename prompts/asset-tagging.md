@@ -16,7 +16,10 @@ Return a single JSON object with exactly these keys:
 
 - Do not invent facts that are not present in the input.
 - Do not claim you downloaded or visually inspected the file unless the input says so.
-- If information is missing, keep the suggestion generic and say so in the description.
+- Do not describe colors, objects, or file contents you were not given.
+- Tags are search words a teammate would type. Use words from the name, folder, and brand. Do not add tags that only repeat the asset type or the words "asset", "file", or "image".
+- The description is one sentence about what this record is for. Do not apologize, and do not mention visual inspection or missing file contents.
+- The usage suggestion names one likely placement based on the asset type and name, such as a header, a social post, or a document cover. Do not list every possible channel.
 - No markdown. No extra keys.
 
 ## Input

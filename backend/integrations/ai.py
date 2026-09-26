@@ -152,34 +152,64 @@ def build_tagging_prompt(asset, brand=None) -> str:
 
 
 def _generate_json(client, *, contents: str, config):
-    """Retry while Gemini reports a temporary overload. Keep the configured model."""
+    """Try the primary model, then one fallback if that model is overloaded."""
     from google.genai.errors import APIError
 
-    delays = (1.0, 2.0)
+    models = [settings.GEMINI_MODEL]
+    fallback = (settings.GEMINI_FALLBACK_MODEL or "").strip()
+    if fallback and fallback != settings.GEMINI_MODEL:
+        models.append(fallback)
+
+    for index, model in enumerate(models):
+        try:
+            return _generate_with_retries(
+                client,
+                model=model,
+                contents=contents,
+                config=config,
+                delays=(1.0, 2.0) if index == 0 else (),
+            )
+        except APIError as exc:
+            overloaded = _is_overloaded(exc)
+            if overloaded and index < len(models) - 1:
+                logger.warning(
+                    "Gemini model %s is busy (%s). Trying %s.",
+                    model,
+                    exc.code,
+                    models[index + 1],
+                )
+                continue
+            logger.warning("Gemini tagging request failed: %s", redact_secret(str(exc)))
+            if overloaded or _is_rate_limited(exc):
+                raise AIError("Gemini is busy right now. Try again in a moment.") from exc
+            raise AIError("Gemini could not generate tags. Try again.") from exc
+
+
+def _generate_with_retries(client, *, model: str, contents: str, config, delays):
+    from google.genai.errors import APIError
+
     attempt = 0
     while True:
         try:
             return client.models.generate_content(
-                model=settings.GEMINI_MODEL,
+                model=model,
                 contents=contents,
                 config=config,
             )
         except APIError as exc:
-            busy = exc.code in {429, 500, 503, 504} or (exc.status or "") in {
-                "UNAVAILABLE",
-                "RESOURCE_EXHAUSTED",
-            }
-            if not busy or attempt >= len(delays):
-                logger.warning(
-                    "Gemini tagging request failed: %s", redact_secret(str(exc))
-                )
-                if busy:
-                    raise AIError(
-                        "Gemini is busy right now. Try again in a moment."
-                    ) from exc
-                raise AIError("Gemini could not generate tags. Try again.") from exc
+            retryable = _is_overloaded(exc) or _is_rate_limited(exc)
+            if not retryable or attempt >= len(delays):
+                raise
             time.sleep(delays[attempt])
             attempt += 1
+
+
+def _is_overloaded(exc) -> bool:
+    return exc.code in {500, 503, 504} or (exc.status or "") == "UNAVAILABLE"
+
+
+def _is_rate_limited(exc) -> bool:
+    return exc.code == 429 or (exc.status or "") == "RESOURCE_EXHAUSTED"
 
 
 def smoke_gemini() -> str:
