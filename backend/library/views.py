@@ -2,7 +2,14 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from integrations.ai import AINotImplemented, suggest_asset_tags
+from brands.models import Brand
+from integrations.ai import (
+    AIError,
+    AIInvalidResponse,
+    AINotConfigured,
+    normalize_suggestion,
+    suggest_asset_tags,
+)
 from integrations.webhooks import emit_after_commit
 from library.models import Asset, Folder
 from library.serializers import AssetSerializer, FolderSerializer
@@ -85,15 +92,26 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="ai-tags")
     def ai_tags(self, request, pk=None):
         asset = self.get_object()
+        brand = Brand.objects.filter(workspace_id=asset.workspace_id).first()
         try:
-            suggestion = suggest_asset_tags(asset)
-        except AINotImplemented as exc:
+            suggestion = suggest_asset_tags(asset, brand=brand)
+        except AINotConfigured as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_501_NOT_IMPLEMENTED)
+        except (AIInvalidResponse, AIError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(suggestion)
 
     @action(detail=True, methods=["patch"], url_path="ai-tags/save")
     def save_ai_tags(self, request, pk=None):
-        return Response(
-            {"detail": "Saving AI suggestions is not implemented yet."},
-            status=status.HTTP_501_NOT_IMPLEMENTED,
+        asset = self.get_object()
+        try:
+            cleaned = normalize_suggestion(request.data)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        asset.tags = cleaned["tags"]
+        asset.description = cleaned["description"]
+        asset.usage_suggestion = cleaned["usage_suggestion"]
+        asset.save(
+            update_fields=["tags", "description", "usage_suggestion", "updated_at"]
         )
+        return Response(AssetSerializer(asset).data)

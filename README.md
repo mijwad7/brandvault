@@ -1,6 +1,6 @@
 # BrandVault
 
-Brand kit and asset library. This repository currently contains the project foundation: models, auth, API skeleton, and a React application shell. The full product UI, Gemini tagging, and n8n workflow are not implemented yet.
+Brand kit and asset library. Gemini tag suggestions run on the backend and are saved only after review in the library. The n8n workflow is not implemented yet.
 
 ## Stack
 
@@ -9,7 +9,8 @@ Brand kit and asset library. This repository currently contains the project foun
 - PostgreSQL via Supabase
 - Supabase Auth
 - Supabase Storage (designed, not wired for uploads yet)
-- Gemini and n8n later, backend only
+- Gemini tagging on the backend, reviewed in the library before save
+- n8n later, backend only
 
 ## Local setup
 

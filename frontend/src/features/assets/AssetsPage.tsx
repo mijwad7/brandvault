@@ -20,6 +20,8 @@ import {
   MAX_FOLDER_DEPTH,
 } from '../folders/tree.ts'
 import { useSearchParams } from 'react-router-dom'
+import { TagReviewDialog } from '../ai/TagReviewDialog.tsx'
+import type { AISuggestion } from '../ai/types.ts'
 import { AssetForm } from './AssetForm.tsx'
 import { assetToForm, emptyAssetForm, type AssetFormState } from './assetFormState.ts'
 
@@ -84,6 +86,11 @@ export function AssetsPage() {
   const [confirmError, setConfirmError] = useState('')
   const [confirmPending, setConfirmPending] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
+  const [reviewAsset, setReviewAsset] = useState<Asset | null>(null)
+  const [suggestion, setSuggestion] = useState<AISuggestion | null>(null)
+  const [reviewSaving, setReviewSaving] = useState(false)
+  const [reviewError, setReviewError] = useState('')
 
   const byId = useMemo(() => folderMap(folders), [folders])
   const currentFolder = folderId ? (byId.get(folderId) ?? null) : null
@@ -280,6 +287,53 @@ export function AssetsPage() {
     } catch (caught) {
       toast.error(getApiErrorMessage(caught))
     }
+  }
+
+  function closeReview() {
+    if (reviewSaving) {
+      return
+    }
+    setReviewAsset(null)
+    setSuggestion(null)
+    setReviewError('')
+  }
+
+  async function generateTags(asset: Asset) {
+    setGeneratingId(asset.id)
+    setReviewError('')
+    try {
+      const result = await api.post<AISuggestion>(`/assets/${asset.id}/ai-tags`)
+      setReviewAsset(asset)
+      setSuggestion(result)
+    } catch (caught) {
+      toast.error(getApiErrorMessage(caught))
+    } finally {
+      setGeneratingId(null)
+    }
+  }
+
+  async function saveSuggestion(next: AISuggestion) {
+    if (!reviewAsset) {
+      return
+    }
+    setReviewSaving(true)
+    setReviewError('')
+    try {
+      const saved = await api.patch<Asset>(`/assets/${reviewAsset.id}/ai-tags/save`, next)
+      setAssets((current) => current.map((item) => (item.id === saved.id ? saved : item)))
+    } catch (caught) {
+      const parsed = readApiErrors(caught)
+      setReviewError(parsed.form || getApiErrorMessage(caught))
+      if (!isInlineApiError(caught)) {
+        toast.error(parsed.form || 'Could not save the tags.')
+      }
+      setReviewSaving(false)
+      return
+    }
+    toast.success(`Saved tags for “${reviewAsset.name}”.`)
+    setReviewSaving(false)
+    setReviewAsset(null)
+    setSuggestion(null)
   }
 
   const title = search ? 'Search' : (currentFolder?.name ?? 'Library')
@@ -515,6 +569,21 @@ export function AssetsPage() {
                             {typeLabels[asset.type]}
                           </p>
                         </div>
+                        {asset.tags.length > 0 ? (
+                          <ul className="flex flex-wrap gap-1">
+                            {asset.tags.map((tag) => (
+                              <li
+                                key={tag}
+                                className="rounded-full bg-muted-surface px-2 py-0.5 text-xs text-ink"
+                              >
+                                {tag}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        {asset.description ? (
+                          <p className="line-clamp-2 text-sm text-muted">{asset.description}</p>
+                        ) : null}
                         {asset.url ? (
                           <a
                             href={asset.url}
@@ -526,6 +595,17 @@ export function AssetsPage() {
                             <Icon name="external" className="size-3.5" />
                           </a>
                         ) : null}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="w-full"
+                          disabled={generatingId === asset.id}
+                          onClick={() => {
+                            void generateTags(asset)
+                          }}
+                        >
+                          {generatingId === asset.id ? 'Generating…' : 'Generate tags'}
+                        </Button>
                         <div className="flex gap-2">
                           <Button variant="secondary" size="sm" className="flex-1" onClick={() => openEdit(asset)}>
                             Edit
@@ -618,6 +698,18 @@ export function AssetsPage() {
           onCancel={closeForm}
         />
       </Dialog>
+
+      <TagReviewDialog
+        asset={reviewAsset}
+        suggestion={suggestion}
+        open={reviewAsset !== null && suggestion !== null}
+        saving={reviewSaving}
+        error={reviewError}
+        onClose={closeReview}
+        onSave={(next) => {
+          void saveSuggestion(next)
+        }}
+      />
 
       <ConfirmDialog
         open={confirm !== null}

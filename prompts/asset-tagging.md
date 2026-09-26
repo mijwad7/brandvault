@@ -1,6 +1,6 @@
 # Asset tagging prompt
 
-Used later by the Django AI service when calling Gemini. The API key stays on the backend.
+Used by the Django AI service when calling Gemini. The API key stays on the backend. Nothing is saved until the user accepts the suggestion.
 
 ## Task
 
