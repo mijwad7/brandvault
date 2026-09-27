@@ -114,4 +114,11 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
         asset.save(
             update_fields=["tags", "description", "usage_suggestion", "updated_at"]
         )
+        emit_after_commit(
+            "asset.ai_tags_saved",
+            {
+                "asset_id": str(asset.id),
+                "user_email": request.user.email,
+            },
+        )
         return Response(AssetSerializer(asset).data)

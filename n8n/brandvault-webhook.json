@@ -1,0 +1,113 @@
+{
+  "name": "BrandVault webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brandvault",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c4a1e8b2-6d3f-4a90-9c17-1b2e8f0a7d31",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "b7e2c91a-4f58-4d6e-a013-9c8d2e5f6a70"
+    },
+    {
+      "parameters": {},
+      "id": "e8d3a1c4-2b70-4f19-8a56-3d9c1e7b4f02",
+      "name": "Log event",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ],
+      "notes": "Execution history is the log. The webhook JSON is the input item."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {}
+      },
+      "id": "a91f6c20-5e84-4b37-9d12-6f0c3a8e1b45",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "brandvault@example.com",
+        "toEmail": "ops@example.com",
+        "subject": "=BrandVault {{ $json.body.event }}",
+        "emailFormat": "text",
+        "text": "=event={{ $json.body.event }}\ntimestamp={{ $json.body.timestamp }}\nasset_id={{ $json.body.asset_id }}\nbrand_id={{ $json.body.brand_id }}\nuser_email={{ $json.body.user_email }}",
+        "options": {}
+      },
+      "id": "f2c80d56-7a19-4e83-b4d0-1a6e9c3f8b27",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        300
+      ],
+      "disabled": true,
+      "notes": "Off until you attach your own SMTP credential. No secrets in this file. Leave it disabled to log only."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Log event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log event": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

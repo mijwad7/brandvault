@@ -1,6 +1,6 @@
 # BrandVault
 
-Brand kit and asset library. Gemini tag suggestions run on the backend and are saved only after review in the library. The n8n workflow is not implemented yet.
+Brand kit and asset library. Gemini tag suggestions run on the backend and are saved only after review in the library. Optional n8n notifications are off unless `N8N_WEBHOOK_URL` is set.
 
 ## Live demo
 
@@ -16,7 +16,7 @@ Demo login: `demo@brandvault.dev` / `Demo1234!`
 - Supabase Auth
 - Supabase Storage for asset files and the brand logo. Bytes go from the browser to Storage. Django stores the path and the public URL.
 - Gemini tagging on the backend, reviewed in the library before save
-- n8n later, backend only
+- Optional n8n webhook (`n8n/brandvault-webhook.json`). Empty `N8N_WEBHOOK_URL` disables it.
 
 ## Local setup
 
@@ -128,7 +128,7 @@ The login page includes **Continue as demo**. It signs in through Supabase as `d
 
 ## Production
 
-API on Railway. Frontend on Vercel. Auth, Postgres, and Storage stay on the existing Supabase project. No n8n in this deploy.
+API on Railway. Frontend on Vercel. Auth, Postgres, and Storage stay on the existing Supabase project. n8n is optional and stays off until `N8N_WEBHOOK_URL` is set on the API.
 
 `GET /api/health` stays public. Railway healthcheck path: `/api/health`.
 
@@ -162,6 +162,7 @@ Set variables on the Railway service before the first deploy. `DEBUG=False` requ
 | `SUPABASE_STORAGE_BUCKET` | `assets` |
 | `SUPABASE_SERVICE_ROLE_KEY` | leave empty (uploads use the user JWT in the browser) |
 | `GEMINI_API_KEY` | optional |
+| `N8N_WEBHOOK_URL` | leave **empty** to disable notifications. To turn them on, paste the n8n production webhook URL (see below). Django only. |
 | `USE_X_FORWARDED_PROTO` | omit it; it turns on when `DEBUG=False` |
 
 Generate a secret locally if you need one: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
@@ -208,6 +209,48 @@ Supabase → Authentication → URL Configuration:
 - Redirect URLs: that origin, plus `http://localhost:5173` and `http://localhost:5173/**`.
 
 Demo login on the live site: `demo@brandvault.dev` / `Demo1234!`.
+
+## Optional n8n bonus
+
+Django POSTs a JSON webhook after the database commit when one of these happens. A down n8n does not fail the save, restore, or brand update. Leave `N8N_WEBHOOK_URL` empty and nothing is sent.
+
+| Event | When |
+| --- | --- |
+| `brand.updated` | Brand kit PATCH succeeds |
+| `asset.restored` | Asset is restored from trash |
+| `asset.ai_tags_saved` | Reviewed AI tags are saved |
+
+```json
+{
+  "event": "asset.ai_tags_saved",
+  "timestamp": "2026-09-27T17:00:00+00:00",
+  "asset_id": "11111111-1111-1111-1111-111111111111",
+  "user_email": "demo@brandvault.dev"
+}
+```
+
+`brand.updated` sends `brand_id` instead of `asset_id`. The other two fields stay the same.
+
+Workflow file: `n8n/brandvault-webhook.json`.
+
+It is Webhook (POST) → Log event (no-op; the n8n execution list is the log) → Respond to Webhook (`ok`) → Send Email. Send Email is disabled and uses placeholder addresses only. No SMTP secret is in the file. Leave that node off unless you attach your own SMTP credential in n8n.
+
+`N8N_WEBHOOK_URL` belongs on Django (local `backend/.env` or the Railway service). Do not put it on Vercel. Empty means disabled. Examples in `.env.example` and `backend/.env.example` stay empty.
+
+Import and activate on n8n Cloud:
+
+1. Open [n8n Cloud](https://app.n8n.cloud/) and sign in.
+2. Left nav: **Workflows**.
+3. Top right: **Create workflow** (the canvas can be blank).
+4. Top right: the **⋯** menu → **Import from file**.
+5. Choose `n8n/brandvault-webhook.json` from this repo.
+6. Top right: **Save**.
+7. Top right: switch **Inactive** to **Active**. Confirm if n8n asks.
+8. Open the **Webhook** node. Copy the **Production URL** (`https://<your-instance>.app.n8n.cloud/webhook/brandvault`). Do not use the Test URL.
+9. Railway → the Django service → **Variables** → set `N8N_WEBHOOK_URL` to that production URL. Redeploy or restart if Railway does not reload env on its own.
+10. To turn notifications off again, clear `N8N_WEBHOOK_URL` on Railway. Do not commit the URL.
+
+Check a run: n8n → **Executions**. A successful brand save, trash restore, or AI-tag save shows the event, id, email, and timestamp on **Log event**.
 
 ## Useful commands
 
