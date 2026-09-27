@@ -12,7 +12,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "asset-tagging.md"
+PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "asset-tagging.md"
 SUGGESTION_KEYS = ("tags", "description", "usage_suggestion")
 MIN_TAGS = 3
 MAX_TAGS = 8
