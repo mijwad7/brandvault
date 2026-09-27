@@ -2,6 +2,12 @@
 
 Brand kit and asset library. Gemini tag suggestions run on the backend and are saved only after review in the library. The n8n workflow is not implemented yet.
 
+## Live demo
+
+Public URL: add the Vercel URL here after the first deploy.
+
+Demo login: `demo@brandvault.dev` / `Demo1234!`
+
 ## Stack
 
 - React, TypeScript, Vite, Tailwind CSS
@@ -119,6 +125,89 @@ The login page includes **Continue as demo**. It signs in through Supabase as `d
 1. Supabase → Authentication → Providers → Google. Enable it and paste the Google OAuth client ID and secret.
 2. In Google Cloud, set the authorized redirect URI to `https://<project-ref>.supabase.co/auth/v1/callback`.
 3. Supabase → Authentication → URL Configuration. Add the deployed site URL and `http://localhost:5173` to the site URL and redirect allow list.
+
+## Production
+
+API on Railway. Frontend on Vercel. Auth, Postgres, and Storage stay on the existing Supabase project. No n8n in this deploy.
+
+`GET /api/health` stays public. Railway healthcheck path: `/api/health`.
+
+### Railway (Django)
+
+Create a service from this repo.
+
+| Railway UI field | Value |
+| --- | --- |
+| Root Directory | `backend` |
+| Builder | Nixpacks (from `backend/railway.toml`) |
+| Start command | leave empty to use `railway.toml`, or `python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT` |
+| Healthcheck path | `/api/health` |
+| Watch paths | leave default |
+
+`backend/runtime.txt` pins Python 3.12 (Nixpacks provides 3.12 and 3.13, not 3.14). Local dev can stay on 3.14. `backend/Procfile` matches the start command. Before each deploy, Railway runs `python manage.py migrate --noinput` (`preDeployCommand` in `backend/railway.toml`). The start command runs `collectstatic` in the web process so WhiteNoise can serve `/static/` (admin). The API itself is JSON. If the service settings do not pick up `railway.toml`, set the start command and healthcheck path in the table below by hand.
+
+Set variables on the Railway service before the first deploy. `DEBUG=False` requires `DJANGO_SECRET_KEY` and `DATABASE_URL`.
+
+| Variable | Production value |
+| --- | --- |
+| `DEBUG` | `False` |
+| `DJANGO_SECRET_KEY` | long random string (generate locally; do not commit) |
+| `DATABASE_URL` | Supabase **session** pooler URI. Host looks like `aws-0-<region>.pooler.supabase.com`, user `postgres.<project-ref>`, port **5432**. Do not use the transaction pooler (port 6543). |
+| `DATABASE_SSLMODE` | `require` |
+| `ALLOWED_HOSTS` | the Railway hostname, e.g. `brandvault-api.up.railway.app` (no scheme). `RAILWAY_PUBLIC_DOMAIN` is appended automatically when Railway sets it. |
+| `CORS_ALLOWED_ORIGINS` | the Vercel origin, e.g. `https://brandvault.vercel.app` (scheme required, no trailing slash) |
+| `CSRF_TRUSTED_ORIGINS` | same https origin as CORS |
+| `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `SUPABASE_JWT_SECRET` | leave **empty** so JWTs verify with the project JWKS (ES256/RS256) |
+| `SUPABASE_STORAGE_BUCKET` | `assets` |
+| `SUPABASE_SERVICE_ROLE_KEY` | leave empty (uploads use the user JWT in the browser) |
+| `GEMINI_API_KEY` | optional |
+| `USE_X_FORWARDED_PROTO` | omit it; it turns on when `DEBUG=False` |
+
+Generate a secret locally if you need one: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+
+Manual migrate (Railway shell, working directory is `backend`): `python manage.py migrate`.
+
+### Vercel (Vite)
+
+Create a project from this repo.
+
+| Vercel UI field | Value |
+| --- | --- |
+| Framework Preset | Vite |
+| Root Directory | `frontend` |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+| Install Command | `npm install` |
+
+`frontend/vercel.json` rewrites every path to `/index.html`, so refreshing `/brand`, `/library`, `/trash`, or `/login` stays on the SPA.
+
+Set these **before** the production build. Vite reads them at build time. A later env change needs a new deployment.
+
+| Variable | Production value |
+| --- | --- |
+| `VITE_API_URL` | Railway public origin, e.g. `https://brandvault-api.up.railway.app` (no trailing slash) |
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
+| `VITE_STORAGE_BUCKET` | `assets` |
+
+### Order (CORS)
+
+The browser origin does not exist until Vercel finishes, and the API origin does not exist until Railway finishes.
+
+1. Deploy the API on Railway with the variables above. For the first boot, `CORS_ALLOWED_ORIGINS` can be `http://localhost:5173` if the Vercel URL is not known yet.
+2. Deploy the frontend on Vercel with `VITE_API_URL` set to the Railway `https://…` origin.
+3. Set Railway `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` to that exact Vercel origin (`https://…`, no path).
+4. Redeploy the API (changing Railway variables restarts the service). Changing a `VITE_*` value needs a Vercel redeploy.
+
+### Supabase Auth URLs
+
+Supabase → Authentication → URL Configuration:
+
+- Site URL: the Vercel origin.
+- Redirect URLs: that origin, plus `http://localhost:5173` and `http://localhost:5173/**`.
+
+Demo login on the live site: `demo@brandvault.dev` / `Demo1234!`.
 
 ## Useful commands
 

@@ -7,3 +7,5 @@ PyJWT[crypto]==2.11.0
 pytest==9.0.2
 pytest-django==4.11.1
 google-genai==2.25.0
+gunicorn==26.2.0
+whitenoise==6.12.0

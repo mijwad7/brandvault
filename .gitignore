@@ -12,6 +12,7 @@ htmlcov/
 .env
 backend/.env
 frontend/.env
+backend/staticfiles/
 
 # Node
 frontend/node_modules/
