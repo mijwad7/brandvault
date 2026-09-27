@@ -139,12 +139,12 @@ Create a service from this repo.
 | Railway UI field | Value |
 | --- | --- |
 | Root Directory | `backend` |
-| Builder | Nixpacks (from `backend/railway.toml`) |
+| Builder | Railpack (the default). Leave Nixpacks alone; it is deprecated. |
 | Start command | leave empty to use `railway.toml`, or `python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT` |
 | Healthcheck path | `/api/health` |
 | Watch paths | leave default |
 
-`backend/runtime.txt` pins Python 3.12 (Nixpacks provides 3.12 and 3.13, not 3.14). Local dev can stay on 3.14. `backend/Procfile` matches the start command. Before each deploy, Railway runs `python manage.py migrate --noinput` (`preDeployCommand` in `backend/railway.toml`). The start command runs `collectstatic` in the web process so WhiteNoise can serve `/static/` (admin). The API itself is JSON. If the service settings do not pick up `railway.toml`, set the start command and healthcheck path in the table below by hand.
+`backend/runtime.txt` and `backend/.python-version` pin Python 3.12 for Railpack. Local dev can stay on 3.14. `backend/Procfile` matches the start command. Before each deploy, Railway runs `python manage.py migrate --noinput` (`preDeployCommand` in `backend/railway.toml`). The start command runs `collectstatic` in the web process so WhiteNoise can serve `/static/` (admin). The API itself is JSON. If the service settings do not pick up `railway.toml`, set the start command and healthcheck path in the table below by hand.
 
 Set variables on the Railway service before the first deploy. `DEBUG=False` requires `DJANGO_SECRET_KEY` and `DATABASE_URL`.
 
