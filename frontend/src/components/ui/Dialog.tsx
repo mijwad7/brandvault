@@ -19,6 +19,7 @@ type DialogProps = {
   onClose: () => void
   children: ReactNode
   variant?: 'dialog' | 'sheet'
+  closable?: boolean
 }
 
 export function Dialog({
@@ -28,6 +29,7 @@ export function Dialog({
   onClose,
   children,
   variant = 'dialog',
+  closable = true,
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
@@ -58,6 +60,9 @@ export function Dialog({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
+        if (!closable) {
+          return
+        }
         event.preventDefault()
         onCloseRef.current()
         return
@@ -99,7 +104,7 @@ export function Dialog({
         previouslyFocused.focus()
       }
     }
-  }, [open])
+  }, [open, closable])
 
   if (!open) {
     return null
@@ -110,7 +115,11 @@ export function Dialog({
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-scrim"
-        onClick={() => onCloseRef.current()}
+        onClick={() => {
+          if (closable) {
+            onCloseRef.current()
+          }
+        }}
       />
       <div
         className={cn(
@@ -147,15 +156,17 @@ export function Dialog({
                 </p>
               ) : null}
             </div>
-            <button
-              type="button"
-              data-dialog-close=""
-              className="grid size-11 shrink-0 place-items-center rounded-xl text-muted hover:bg-muted-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={() => onCloseRef.current()}
-              aria-label="Close"
-            >
-              <Icon name="x" />
-            </button>
+            {closable ? (
+              <button
+                type="button"
+                data-dialog-close=""
+                className="grid size-11 shrink-0 place-items-center rounded-xl text-muted hover:bg-muted-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onClick={() => onCloseRef.current()}
+                aria-label="Close"
+              >
+                <Icon name="x" />
+              </button>
+            ) : null}
           </div>
           <div className="mt-5">{children}</div>
         </div>

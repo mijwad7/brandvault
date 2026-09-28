@@ -21,7 +21,7 @@ class ActivitySerializer(serializers.ModelSerializer):
         fields = ("id", "action", "summary", "created_at")
         read_only_fields = fields
 
-    def get_summary(self, activity):
+    def get_summary(self, activity) -> str:
         return activity_summary(activity)
 
 
@@ -33,7 +33,7 @@ class FolderSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "parent", "has_contents", "created_at", "updated_at")
         read_only_fields = ("id", "has_contents", "created_at", "updated_at")
 
-    def get_has_contents(self, folder):
+    def get_has_contents(self, folder) -> bool:
         has_child = getattr(folder, "_has_child", None)
         has_asset = getattr(folder, "_has_asset", None)
         if has_child is None or has_asset is None:
@@ -218,3 +218,9 @@ class AssetSerializer(serializers.ModelSerializer):
                 storage_path=instance.storage_path,
             )
         return super().update(instance, validated_data)
+
+
+class TagSuggestionSerializer(serializers.Serializer):
+    tags = serializers.ListField(child=serializers.CharField(), min_length=3, max_length=8)
+    description = serializers.CharField(max_length=500)
+    usage_suggestion = serializers.CharField(max_length=500)

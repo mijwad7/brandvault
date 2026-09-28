@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     "accounts",
     "brands",
     "library",
@@ -170,6 +172,24 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "BrandVault API",
+    "DESCRIPTION": (
+        "Brand kit and asset library. Most routes need a Supabase access token: "
+        "use Authorize and paste the JWT from a signed-in session. "
+        "The demo password is the app login, not this token. "
+        "GET /api/health and these docs are public. "
+        "POST /api/assets/{id}/ai-tags only suggests tags. "
+        "They are stored by PATCH /api/assets/{id}/ai-tags/save after review."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
 }
 
 if DEBUG:

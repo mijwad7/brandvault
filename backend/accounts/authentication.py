@@ -1,3 +1,4 @@
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -28,3 +29,16 @@ class SupabaseJWTAuthentication(BaseAuthentication):
 
     def authenticate_header(self, request):
         return self.keyword
+
+
+class SupabaseJWTScheme(OpenApiAuthenticationExtension):
+    target_class = "accounts.authentication.SupabaseJWTAuthentication"
+    name = "bearerAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Supabase access token from a signed-in session.",
+        }

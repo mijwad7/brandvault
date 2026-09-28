@@ -1,4 +1,5 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +18,11 @@ def _brand_for(workspace):
         return None
 
 
+@extend_schema_view(
+    get=extend_schema(responses=BrandSerializer),
+    post=extend_schema(request=BrandSerializer, responses={201: BrandSerializer}),
+    patch=extend_schema(request=BrandSerializer, responses=BrandSerializer),
+)
 class BrandView(APIView):
     def get(self, request):
         brand = _brand_for(request.user.workspace)

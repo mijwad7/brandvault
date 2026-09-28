@@ -411,6 +411,9 @@ export function AssetsPage() {
     setSuggestion(null)
   }
 
+  const generatingAsset = generatingId
+    ? (assets.find((item) => item.id === generatingId) ?? null)
+    : null
   const title = currentFolder?.name ?? 'Library'
   const missingFolder = Boolean(folderId) && !loading && !currentFolder && !search
 
@@ -669,11 +672,11 @@ export function AssetsPage() {
                             <Icon name="external" className="size-3.5" />
                           </a>
                         ) : null}
-                        <div className="mt-auto flex flex-wrap items-center gap-1">
+                        <div className="mt-auto flex flex-wrap items-center gap-1 sm:flex-col sm:items-stretch sm:gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="px-2"
+                            className="px-2 sm:w-full sm:border sm:border-line sm:bg-surface sm:px-3"
                             disabled={generatingId === asset.id}
                             onClick={() => {
                               void generateTags(asset)
@@ -685,22 +688,24 @@ export function AssetsPage() {
                                 ? 'Update tags'
                                 : 'Generate tags'}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="px-2 text-muted"
-                            onClick={() => openEdit(asset)}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="px-2 text-muted"
-                            onClick={() => askConfirm({ kind: 'asset', asset })}
-                          >
-                            Trash
-                          </Button>
+                          <div className="contents sm:flex sm:gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="px-2 text-muted sm:flex-1 sm:border sm:border-line sm:bg-surface sm:px-3 sm:text-ink"
+                              onClick={() => openEdit(asset)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="px-2 text-muted sm:flex-1 sm:border sm:border-line sm:bg-surface sm:px-3 sm:text-ink"
+                              onClick={() => askConfirm({ kind: 'asset', asset })}
+                            >
+                              Trash
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </article>
@@ -790,6 +795,26 @@ export function AssetsPage() {
       </Dialog>
 
       <AssetDragGhost drag={drag} label={dragLabel} />
+
+      <Dialog
+        open={generatingAsset !== null}
+        closable={false}
+        title="Writing tags"
+        description={
+          generatingAsset
+            ? `Looking at “${generatingAsset.name}” and your brand kit. This usually takes a few seconds.`
+            : 'Looking at this asset and your brand kit. This usually takes a few seconds.'
+        }
+        onClose={() => {}}
+      >
+        <div className="flex items-center gap-3 text-sm text-muted" role="status" aria-live="polite">
+          <span
+            aria-hidden="true"
+            className="size-4 shrink-0 animate-spin rounded-full border-2 border-line border-t-ink"
+          />
+          Nothing is saved until you review the suggestion.
+        </div>
+      </Dialog>
 
       <TagReviewDialog
         asset={reviewAsset}

@@ -3,6 +3,7 @@ import uuid
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q, TextField
 from django.db.models.functions import Cast
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -19,7 +20,12 @@ from integrations.ai import (
 )
 from integrations.webhooks import emit_after_commit
 from library.models import Activity, Asset, Folder
-from library.serializers import ActivitySerializer, AssetSerializer, FolderSerializer
+from library.serializers import (
+    ActivitySerializer,
+    AssetSerializer,
+    FolderSerializer,
+    TagSuggestionSerializer,
+)
 from library.services import assert_folder_empty, restore_asset, trash_asset
 
 
@@ -38,6 +44,8 @@ class FolderViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Folder.objects.none()
         children = Folder.objects.filter(parent_id=OuterRef("pk"))
         held_assets = Asset.objects.filter(folder_id=OuterRef("pk"))
         return (
@@ -73,6 +81,12 @@ class FolderViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
                 actor_email=email,
             )
 
+    @extend_schema(
+        description="Delete is refused with 409 while the folder has a child folder or any asset, including a trashed one."
+    )
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
 
 class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
     serializer_class = AssetSerializer
@@ -105,7 +119,44 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
                 actor_email=self.request.user.email,
             )
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "folder",
+                str,
+                description="`root` for assets with no folder, or a folder id. Omit to list the whole library.",
+            ),
+            OpenApiParameter(
+                "search",
+                str,
+                description="Matches name, description, and tags.",
+            ),
+            OpenApiParameter(
+                "sort",
+                str,
+                enum=["updated_desc", "name_asc"],
+                description="Default is updated_desc.",
+            ),
+            OpenApiParameter(
+                "trashed",
+                str,
+                enum=["true"],
+                description="Pass true to list trashed assets.",
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(
+        description="Permanently delete an asset that is already in trash. A live asset returns 404."
+    )
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Asset.objects.none()
         qs = Asset.objects.filter(workspace=self.get_workspace()).select_related(
             "folder"
         )
@@ -185,6 +236,11 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
                 actor_email=email,
             )
 
+    @extend_schema(
+        request=None,
+        responses={200: TagSuggestionSerializer},
+        description="Ask Gemini for tags, a description, and a usage note. Nothing is saved.",
+    )
     @action(detail=True, methods=["post"], url_path="ai-tags")
     def ai_tags(self, request, pk=None):
         asset = self.get_object()
@@ -197,6 +253,11 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(suggestion)
 
+    @extend_schema(
+        request=TagSuggestionSerializer,
+        responses=AssetSerializer,
+        description="Store tags after the user reviews them. This is the only route that writes a suggestion.",
+    )
     @action(detail=True, methods=["patch"], url_path="ai-tags/save")
     def save_ai_tags(self, request, pk=None):
         asset = self.get_object()
@@ -228,6 +289,7 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
 
 
 class ActivityListView(APIView):
+    @extend_schema(responses=ActivitySerializer(many=True))
     def get(self, request):
         activities = Activity.objects.filter(workspace=request.user.workspace)[:50]
         return Response(ActivitySerializer(activities, many=True).data)

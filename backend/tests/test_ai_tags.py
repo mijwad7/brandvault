@@ -185,6 +185,49 @@ def test_overloaded_primary_uses_one_fallback(monkeypatch, settings):
     ]
 
 
+def test_fallback_is_retried_when_it_is_also_busy(monkeypatch, settings):
+    from google.genai.errors import APIError
+
+    settings.GEMINI_API_KEY = "test-key"
+    settings.GEMINI_MODEL = "gemini-3.8-flash"
+    settings.GEMINI_FALLBACK_MODEL = "gemini-3.5-flash"
+    monkeypatch.setattr("integrations.ai.time.sleep", lambda _seconds: None)
+    models = []
+
+    class FakeResponse:
+        text = json.dumps(
+            {
+                "tags": ["hero", "banner", "web"],
+                "description": "A named image.",
+                "usage_suggestion": "Use it on the homepage.",
+            }
+        )
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            models.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.8-flash" or models.count("gemini-3.5-flash") < 2:
+                raise APIError(
+                    503,
+                    {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}},
+                )
+            return FakeResponse()
+
+    class FakeClient:
+        models = FakeModels()
+
+    monkeypatch.setattr("integrations.ai.get_gemini_client", lambda: FakeClient())
+    result = suggest_asset_tags(_Asset(), brand=None)
+    assert result["tags"] == ["hero", "banner", "web"]
+    assert models == [
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash",
+    ]
+
+
 def test_rate_limit_does_not_switch_models(monkeypatch, settings):
     from google.genai.errors import APIError
 

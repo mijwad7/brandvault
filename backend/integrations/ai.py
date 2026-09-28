@@ -152,7 +152,7 @@ def build_tagging_prompt(asset, brand=None) -> str:
 
 
 def _generate_json(client, *, contents: str, config):
-    """Try the primary model, then one fallback if that model is overloaded."""
+    """Try the primary model, then the fallback. Each model is retried when it is busy."""
     from google.genai.errors import APIError
 
     models = [settings.GEMINI_MODEL]
@@ -167,7 +167,7 @@ def _generate_json(client, *, contents: str, config):
                 model=model,
                 contents=contents,
                 config=config,
-                delays=(1.0, 2.0) if index == 0 else (),
+                delays=(1.0, 2.0) if index == 0 else (2.0, 4.0),
             )
         except APIError as exc:
             overloaded = _is_overloaded(exc)
