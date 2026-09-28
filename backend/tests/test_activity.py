@@ -86,6 +86,54 @@ def test_permanent_delete_only_removes_trashed_assets():
 
 
 @pytest.mark.django_db
+def test_asset_search_matches_name_tags_and_description():
+    account = make_account("owner@brandvault.dev")
+    client = auth_client(account)
+    Asset.objects.create(
+        workspace=account.workspace,
+        name="Hero",
+        type=Asset.Type.IMAGE,
+        url="https://example.com/hero.png",
+        tags=["campaign", "social"],
+        description="Banner for the spring launch.",
+    )
+    Asset.objects.create(
+        workspace=account.workspace,
+        name="Logo",
+        type=Asset.Type.LOGO,
+        url="https://example.com/logo.png",
+        tags=["brand"],
+        description="Primary mark.",
+    )
+
+    by_tag = client.get("/api/assets", {"search": "social"})
+    assert by_tag.status_code == 200
+    assert [item["name"] for item in by_tag.data] == ["Hero"]
+
+    by_description = client.get("/api/assets", {"search": "spring"})
+    assert [item["name"] for item in by_description.data] == ["Hero"]
+
+    by_name = client.get("/api/assets", {"search": "logo"})
+    assert [item["name"] for item in by_name.data] == ["Logo"]
+
+
+@pytest.mark.django_db
+def test_invalid_folder_query_returns_an_empty_list():
+    account = make_account("owner@brandvault.dev")
+    client = auth_client(account)
+    Asset.objects.create(
+        workspace=account.workspace,
+        name="Hero",
+        type=Asset.Type.IMAGE,
+        url="https://example.com/hero.png",
+    )
+
+    response = client.get("/api/assets", {"folder": "look"})
+    assert response.status_code == 200
+    assert response.data == []
+
+
+@pytest.mark.django_db
 def test_folder_with_contents_reports_has_contents_and_cannot_be_deleted():
     account = make_account("owner@brandvault.dev")
     client = auth_client(account)

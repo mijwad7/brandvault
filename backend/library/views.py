@@ -1,5 +1,8 @@
+import uuid
+
 from django.db import transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q, TextField
+from django.db.models.functions import Cast
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -115,10 +118,18 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
             if folder == "root":
                 qs = qs.filter(folder__isnull=True)
             elif folder:
-                qs = qs.filter(folder_id=folder)
+                try:
+                    folder_id = uuid.UUID(folder)
+                except ValueError:
+                    return qs.none()
+                qs = qs.filter(folder_id=folder_id)
             search = self.request.query_params.get("search")
             if search:
-                qs = qs.filter(name__icontains=search)
+                qs = qs.annotate(_tags_text=Cast("tags", TextField())).filter(
+                    Q(name__icontains=search)
+                    | Q(description__icontains=search)
+                    | Q(_tags_text__icontains=search)
+                )
             if self.request.query_params.get("sort") == "name_asc":
                 qs = qs.order_by("name")
             else:

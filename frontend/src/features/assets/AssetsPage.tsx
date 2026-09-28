@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '../../components/layout/PageHeader.tsx'
 import { Button } from '../../components/ui/Button.tsx'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog.tsx'
@@ -9,7 +9,7 @@ import { Icon, type IconName } from '../../components/ui/icons.tsx'
 import { Skeleton } from '../../components/ui/Skeleton.tsx'
 import { useToast } from '../../components/ui/useToast.ts'
 import { useApi } from '../../hooks/useApi.ts'
-import { getApiErrorMessage, isInlineApiError, readApiErrors } from '../../lib/api.ts'
+import { ApiError, getApiErrorMessage, isInlineApiError, readApiErrors } from '../../lib/api.ts'
 import { cn } from '../../lib/cn.ts'
 import type { Asset, AssetType, Folder } from '../../types/index.ts'
 import {
@@ -41,6 +41,13 @@ const typeIcons: Record<AssetType, IconName> = {
   logo: 'image',
   document: 'file',
   font: 'type',
+}
+
+function libraryLoadMessage(error: unknown): string {
+  if (!(error instanceof ApiError) || error.status >= 500) {
+    return 'Couldn’t reach the library. Try again.'
+  }
+  return getApiErrorMessage(error)
 }
 
 function assetsPath(folderId: string | null, search: string, sort: string): string {
@@ -93,6 +100,18 @@ export function AssetsPage() {
   const [suggestion, setSuggestion] = useState<AISuggestion | null>(null)
   const [reviewSaving, setReviewSaving] = useState(false)
   const [reviewError, setReviewError] = useState('')
+
+  const queryRef = useRef({ folderId, search, sort })
+
+  useEffect(() => {
+    const trimmed = searchInput.trim()
+    if (!trimmed) {
+      setSearch('')
+      return
+    }
+    const timer = window.setTimeout(() => setSearch(trimmed), 250)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
 
   const byId = useMemo(() => folderMap(folders), [folders])
   const currentFolder = folderId ? (byId.get(folderId) ?? null) : null
@@ -163,8 +182,14 @@ export function AssetsPage() {
 
   useEffect(() => {
     let cancelled = false
+    const previous = queryRef.current
+    const quiet =
+      previous.folderId === folderId && (previous.search !== search || previous.sort !== sort)
+    queryRef.current = { folderId, search, sort }
     async function load() {
-      setLoading(true)
+      if (!quiet) {
+        setLoading(true)
+      }
       setError('')
       try {
         const [folderData, assetData] = await Promise.all([
@@ -177,7 +202,7 @@ export function AssetsPage() {
         }
       } catch (caught) {
         if (!cancelled) {
-          setError(getApiErrorMessage(caught))
+          setError(libraryLoadMessage(caught))
         }
       } finally {
         if (!cancelled) {
@@ -386,18 +411,14 @@ export function AssetsPage() {
     setSuggestion(null)
   }
 
-  const title = search ? 'Search' : (currentFolder?.name ?? 'Library')
+  const title = currentFolder?.name ?? 'Library'
   const missingFolder = Boolean(folderId) && !loading && !currentFolder && !search
 
   return (
     <section>
       <PageHeader
         title={title}
-        description={
-          search
-            ? 'Matches from your whole library. Drag a file onto a folder to move it.'
-            : 'Drag a file onto a folder to move it.'
-        }
+        description="Drag a file onto a folder to move it."
         actions={
           <Button className="w-full sm:w-auto" onClick={openCreate}>
             <Icon name="plus" />
@@ -451,43 +472,20 @@ export function AssetsPage() {
             className="h-11 w-full rounded-xl border border-line bg-surface pr-3 pl-10 text-sm text-ink outline-none placeholder:text-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Search by name"
+            placeholder="Search name, tags, or description"
             aria-label="Search assets"
           />
         </div>
-        <div className="flex gap-2">
-          <select
-            className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:flex-none"
-            value={sort}
-            onChange={(event) => setSort(event.target.value)}
-            aria-label="Sort assets"
-          >
-            <option value="updated_desc">Newest updated</option>
-            <option value="name_asc">Name A–Z</option>
-          </select>
-          <Button type="submit" variant="secondary">
-            Search
-          </Button>
-        </div>
+        <select
+          className="h-11 rounded-xl border border-line bg-surface px-3 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          value={sort}
+          onChange={(event) => setSort(event.target.value)}
+          aria-label="Sort assets"
+        >
+          <option value="updated_desc">Newest updated</option>
+          <option value="name_asc">Name A–Z</option>
+        </select>
       </form>
-
-      {search ? (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-muted-surface px-3 py-2 text-sm">
-          <p className="min-w-0 text-ink">
-            Searching the whole library for “{search}”.
-          </p>
-          <button
-            type="button"
-            className="shrink-0 rounded-lg px-2 py-1 font-medium text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={() => {
-              setSearch('')
-              setSearchInput('')
-            }}
-          >
-            Clear
-          </button>
-        </div>
-      ) : null}
 
       {loading ? (
         <LibrarySkeleton />
@@ -595,7 +593,7 @@ export function AssetsPage() {
                   title={search ? 'No matches' : 'Nothing in this folder'}
                   body={
                     search
-                      ? `Nothing in the library is named like “${search}”.`
+                      ? `Nothing in the library matches “${search}”.`
                       : 'Upload a file or paste a link, or open a folder that already has files.'
                   }
                   action={
@@ -637,13 +635,8 @@ export function AssetsPage() {
                         <Icon name="grip" />
                       </button>
                       <AssetVisual asset={asset} />
-                      <div className="flex flex-1 flex-col gap-3 p-3">
-                        <div className="min-w-0">
-                          <h3 className="truncate font-medium text-ink">{asset.name}</h3>
-                          <p className="mt-0.5 text-xs font-medium tracking-wide text-muted uppercase">
-                            {typeLabels[asset.type]}
-                          </p>
-                        </div>
+                      <div className="flex flex-1 flex-col gap-2 p-3">
+                        <h3 className="truncate pr-10 font-medium text-ink">{asset.name}</h3>
                         {asset.tags.length > 0 ? (
                           <ul className="flex flex-wrap gap-1">
                             {asset.tags.map((tag) => (
@@ -660,7 +653,7 @@ export function AssetsPage() {
                           <p className="line-clamp-2 text-sm text-muted">{asset.description}</p>
                         ) : null}
                         {asset.usage_suggestion ? (
-                          <p className="line-clamp-2 text-sm text-ink">
+                          <p className="line-clamp-1 text-sm text-ink">
                             <span className="font-medium">Use: </span>
                             {asset.usage_suggestion}
                           </p>
@@ -676,31 +669,38 @@ export function AssetsPage() {
                             <Icon name="external" className="size-3.5" />
                           </a>
                         ) : null}
-                        <div className="mt-auto flex flex-col gap-2">
+                        <div className="mt-auto flex flex-wrap items-center gap-1">
                           <Button
-                            variant="secondary"
+                            variant="ghost"
                             size="sm"
-                            className="w-full"
+                            className="px-2"
                             disabled={generatingId === asset.id}
                             onClick={() => {
                               void generateTags(asset)
                             }}
                           >
-                            {generatingId === asset.id ? 'Generating…' : 'Generate tags'}
+                            {generatingId === asset.id
+                              ? 'Generating…'
+                              : asset.tags.length > 0
+                                ? 'Update tags'
+                                : 'Generate tags'}
                           </Button>
-                          <div className="flex gap-2">
-                            <Button variant="secondary" size="sm" className="flex-1" onClick={() => openEdit(asset)}>
-                              Edit
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="flex-1"
-                              onClick={() => askConfirm({ kind: 'asset', asset })}
-                            >
-                              Trash
-                            </Button>
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="px-2 text-muted"
+                            onClick={() => openEdit(asset)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="px-2 text-muted"
+                            onClick={() => askConfirm({ kind: 'asset', asset })}
+                          >
+                            Trash
+                          </Button>
                         </div>
                       </div>
                     </article>

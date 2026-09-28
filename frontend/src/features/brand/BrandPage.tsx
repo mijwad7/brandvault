@@ -48,6 +48,7 @@ export function BrandPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoInputKey, setLogoInputKey] = useState(0)
   const [logoError, setLogoError] = useState('')
+  const [logoLinkFocused, setLogoLinkFocused] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -226,14 +227,13 @@ export function BrandPage() {
             }}
           />
 
-          <TextField
-            label="Logo URL"
-            type="url"
+          <LogoLinkField
             value={form.logo_url}
-            onChange={(event) => update('logo_url', event.target.value)}
             error={fieldErrors.logo_url}
-            placeholder="https://"
-            hint="Optional if you upload a file."
+            focused={logoLinkFocused}
+            onFocus={() => setLogoLinkFocused(true)}
+            onBlur={() => setLogoLinkFocused(false)}
+            onChange={(value) => update('logo_url', value)}
           />
 
           <FormAlert message={formError} />
@@ -252,6 +252,72 @@ export function BrandPage() {
         />
       </div>
     </section>
+  )
+}
+
+function fileNameFromUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) {
+    return ''
+  }
+  try {
+    const name = decodeURIComponent(new URL(trimmed).pathname.split('/').filter(Boolean).pop() ?? '')
+    return name
+  } catch {
+    return trimmed.split('/').pop()?.split('?')[0] ?? ''
+  }
+}
+
+function LogoLinkField({
+  value,
+  error,
+  focused,
+  onFocus,
+  onBlur,
+  onChange,
+}: {
+  value: string
+  error?: string
+  focused: boolean
+  onFocus: () => void
+  onBlur: () => void
+  onChange: (value: string) => void
+}) {
+  const fileName = fileNameFromUrl(value)
+  const showName = Boolean(fileName) && !focused
+
+  return (
+    <div>
+      <label htmlFor="brand-logo-url" className="mb-1.5 block text-sm font-medium text-ink">
+        Logo URL
+      </label>
+      <div className="relative">
+        <input
+          id="brand-logo-url"
+          type="url"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          placeholder="https://"
+          aria-invalid={error ? true : undefined}
+          className={cn(controlClass, error && 'border-danger', showName && 'text-transparent')}
+        />
+        {showName ? (
+          <span className="pointer-events-none absolute inset-y-0 right-3 left-3 flex items-center truncate text-sm text-ink">
+            {fileName}
+          </span>
+        ) : null}
+      </div>
+      {error ? <p className="mt-1.5 text-sm text-danger">{error}</p> : null}
+      {value ? (
+        <p className="mt-1.5 truncate text-xs text-muted" title={value}>
+          {value}
+        </p>
+      ) : (
+        <p className="mt-1.5 text-xs leading-relaxed text-muted">Optional if you upload a file.</p>
+      )}
+    </div>
   )
 }
 

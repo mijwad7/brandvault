@@ -1,59 +1,247 @@
 # BrandVault
 
-Brand kit and asset library. Gemini tag suggestions run on the backend and are saved only after review in the library. Optional n8n notifications are off unless `N8N_WEBHOOK_URL` is set.
+One signed-in user gets one workspace: a brand kit and an asset library with folders, search, sort, trash, and restore. Tag suggestions come from Gemini on the API. They are saved only after the user reviews them.
 
 ## Live demo
 
-Public URL: add the Vercel URL here after the first deploy.
+- App: https://brandvault-omega.vercel.app/
+- API: https://brandvault-production.up.railway.app/api/health
+- Demo login: `demo@brandvault.dev` / `Demo1234!`
+- Or use **Continue as demo** on the login page. That still signs in through Supabase. It is not an API bypass.
+- Walkthrough: paste the Loom URL here before you send the submission email.
 
-Demo login: `demo@brandvault.dev` / `Demo1234!`
+Google sign-in is optional. Email and password, or the demo button, is enough.
 
 ## Stack
 
-- React, TypeScript, Vite, Tailwind CSS
-- Django, Django REST Framework
-- PostgreSQL via Supabase
-- Supabase Auth
-- Supabase Storage for asset files and the brand logo. Bytes go from the browser to Storage. Django stores the path and the public URL.
-- Gemini tagging on the backend, reviewed in the library before save
-- Optional n8n webhook (`n8n/brandvault-webhook.json`). Empty `N8N_WEBHOOK_URL` disables it.
-- Activity log at `/activity`, scoped to the signed-in workspace. The API writes it; the client cannot.
+- React, TypeScript, Vite, Tailwind CSS (Vercel)
+- Django and Django REST Framework (Railway)
+- PostgreSQL on Supabase (the deployed demo does not use SQLite)
+- Supabase Auth (email/password, demo account, optional Google)
+- Supabase Storage for asset files and the brand logo
+- Gemini for tag suggestions, called only from Django
+- Optional n8n webhook: `n8n/brandvault-webhook.json`
+
+Schema is in Django migrations under `backend/accounts/migrations`, `backend/brands/migrations`, and `backend/library/migrations`.
+
+## Architecture
+
+The browser never holds the Gemini key, the Django secret, or the database URL. File bytes go from the browser to Storage with the signed-in user's Supabase JWT. Django stores the path and the public URL.
+
+```mermaid
+flowchart LR
+  browser["React on Vercel"]
+  api["Django REST on Railway"]
+  auth["Supabase Auth"]
+  db["Supabase Postgres"]
+  storage["Supabase Storage"]
+  gemini["Gemini"]
+  n8n["n8n webhook"]
+
+  browser -->|"sign in"| auth
+  browser -->|"Bearer JWT"| api
+  browser -->|"upload with user JWT"| storage
+  api --> db
+  api --> gemini
+  api -->|"after commit, if configured"| n8n
+```
+
+Tradeoff: auth and files live in Supabase, while brand and library rows live behind Django. One workspace query filter is the authorization rule for those rows. Storage has its own policies, scoped by the Supabase user id, because Storage cannot see the Django workspace id.
+
+## Data model
+
+One account, created on first valid sign-in, owns one workspace. Brand, folders, assets, and activity rows all point at that workspace.
+
+```mermaid
+erDiagram
+  Account ||--|| Workspace : owns
+  Workspace ||--o| Brand : has
+  Workspace ||--o{ Folder : contains
+  Workspace ||--o{ Asset : contains
+  Workspace ||--o{ Activity : logs
+  Folder ||--o{ Folder : parent
+  Folder ||--o{ Asset : holds
+```
+
+| Model | Role |
+| --- | --- |
+| `Account` | Maps a Supabase user id to a local user. |
+| `Workspace` | Single library for that account. No switcher. |
+| `Brand` | One brand kit per workspace. Name is required. Colors are hex. Logo URL and font are optional. |
+| `Folder` | Parent/child folders. Maximum depth is 3. |
+| `Asset` | Name, type, URL and/or storage path, optional folder, tags, description, usage suggestion, `deleted_at`. |
+| `Activity` | Append-only log written by the API. The client cannot post to it. |
+
+**Soft delete.** `deleted_at` is null for library assets and set when an asset is trashed. `GET /api/assets` returns only live assets. `GET /api/assets?trashed=true` returns only trashed assets. `DELETE /api/assets/:id` permanently deletes an asset that is already in trash.
+
+**Folder deletion.** Deleting a folder is blocked while it still has a child folder or any asset, including a trashed one. The API returns 409. Folder and asset foreign keys use `PROTECT`, so a non-empty folder cannot be removed by a cascade. Empty folders can be deleted.
+
+## Authorization
+
+Every route except `GET /api/health` requires a Supabase JWT. Django checks that token, then loads or creates the account and its one workspace.
+
+Brand, folder, asset, and activity queries are filtered to `request.user.workspace`. A signed-in user who asks for another user's id gets **404**. They do not get that row. Missing or invalid tokens get **401**. Invalid input gets **400**. A folder that still has contents gets **409**.
+
+Storage objects live under `workspaces/{supabase_user_id}/`. Insert, update, and delete policies allow that user only. Django rejects a `storage_path` it did not mint for that user.
 
 ## Local setup
 
-1. Create `backend/.env` from `backend/.env.example`.
-2. Create `frontend/.env` from `frontend/.env.example`.
-3. Activate the existing virtualenv (`venv\Scripts\activate` on Windows).
-4. `pip install -r backend/requirements.txt`
-5. `python backend/manage.py migrate`
-6. `python backend/manage.py runserver`
-7. `cd frontend && npm install && npm run dev`
+1. Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env`. Fill the Supabase and database values. Leave secrets out of git.
+2. `venv\Scripts\activate` (Windows) or `source venv/bin/activate`.
+3. `pip install -r backend/requirements.txt`
+4. `python backend/manage.py migrate`
+5. `python backend/manage.py runserver`
+6. `cd frontend && npm install && npm run dev`
 
-Without `DATABASE_URL`, Django uses local SQLite in `DEBUG` only so the API can start. Point `DATABASE_URL` at Supabase Postgres before any real demo.
+Open `http://localhost:5173`. The API is `http://localhost:8000`.
 
-Without Supabase URL/JWT settings, the API starts but authenticated routes return 401. There is no placeholder auth bypass.
+`DATABASE_URL` empty is allowed only when `DEBUG=True`, and then Django uses a local SQLite file so the API can boot. The live demo uses Supabase Postgres. With no Supabase URL or JWT settings, authenticated routes return 401. There is no auth bypass. Gemini is optional at boot: an empty `GEMINI_API_KEY` still lets the API start, and tag generation returns 501.
 
-Gemini is backend-only and optional at boot. Leave `GEMINI_API_KEY` empty and the API still starts.
+## API
 
-## File uploads (Supabase Storage)
+All paths are under `/api`. Mutating routes require the JWT.
 
-The browser uploads bytes with the signed-in user's Supabase JWT and the anon key. Django never sees the file bytes and never uses the service role key for this.
+| Resource | Endpoints |
+| --- | --- |
+| Session | `GET /me` |
+| Brand | `GET /brand`, `POST /brand`, `PATCH /brand` |
+| Folders | `GET /folders`, `POST /folders`, `PATCH /folders/:id`, `DELETE /folders/:id` |
+| Assets | `GET /assets`, `POST /assets`, `PATCH /assets/:id` |
+| Trash | `POST /assets/:id/trash`, `POST /assets/:id/restore` |
+| Permanent delete | `DELETE /assets/:id` (trash only) |
+| GenAI | `POST /assets/:id/ai-tags`, `PATCH /assets/:id/ai-tags/save` |
+| Activity | `GET /activity` |
 
-Paths (the second folder is the Supabase Auth user id, `auth.uid()`, not the Django workspace id):
+`GET /assets` accepts `folder` (`root` or a folder id), `search`, and `sort` (`updated_desc` by default, or `name_asc`). Search matches name, and also description and tags. Soft-deleted assets are excluded unless `trashed=true`.
+
+## GenAI
+
+- Provider: Google Gemini (`GEMINI_MODEL`, with `GEMINI_FALLBACK_MODEL` if the primary model is overloaded).
+- Suggest: `POST /api/assets/:id/ai-tags`. This does not write the asset.
+- Save: `PATCH /api/assets/:id/ai-tags/save`. The UI sends this only after the user accepts or edits the suggestion.
+- Prompt file: `backend/prompts/asset-tagging.md`.
+- Input: asset name, type, URL, optional folder name, optional brand name and colors. The prompt tells the model not to invent facts outside that input.
+- Validation: Gemini is asked for JSON matching a schema with exactly `tags`, `description`, and `usage_suggestion`. `normalize_suggestion` then checks the shape again: 3 to 8 short unique tags, and two short sentences. Invalid model JSON becomes 502 and is not stored. The save route runs the same check and returns 400 if the reviewed payload is invalid. The API key is read only in Django.
+
+## n8n bonus
+
+Django POSTs a webhook after the database commit. A down or empty webhook does not fail the brand update, restore, or tag save. Leave `N8N_WEBHOOK_URL` empty and nothing is sent. Set it only on the API (Railway or `backend/.env`), never in the frontend.
+
+| Event | When |
+| --- | --- |
+| `brand.updated` | Brand kit `PATCH` succeeds |
+| `asset.restored` | Asset is restored from trash |
+| `asset.ai_tags_saved` | Reviewed AI tags are saved |
+
+```json
+{
+  "event": "asset.ai_tags_saved",
+  "timestamp": "2026-09-27T17:00:00+00:00",
+  "asset_id": "11111111-1111-1111-1111-111111111111",
+  "user_email": "demo@brandvault.dev"
+}
+```
+
+`brand.updated` sends `brand_id` instead of `asset_id`.
+
+Workflow file: `n8n/brandvault-webhook.json`.
+
+Import it in n8n (**Workflows → Create workflow → ⋯ → Import from file**), save, and set it **Active**. Copy the **Production** webhook URL from the Webhook node (`POST`), not the Test URL, into Railway `N8N_WEBHOOK_URL`. The workflow logs the body, responds `ok`, then has a Send Email node that ships **disabled** with placeholder addresses. No SMTP secret is in the file. Executions are the log.
+
+## Tradeoffs and what I skipped
+
+- One workspace per user. No workspace switcher, invites, or roles.
+- Brand delete is not implemented. Create, read, and update are.
+- Uploads are real, but the browser talks to Storage directly. Django never receives the file bytes and does not use the service role key for uploads.
+- The Storage bucket is public so image previews can use a public URL. Writes are still limited to the owner's prefix.
+- Activity log, drag-and-drop between folders, dark mode, pytest, file upload, and the n8n workflow are included. The assignment asked for at most a couple of extras; these were small once the library existed.
+- The exported n8n workflow logs the event. It does not send email until someone attaches SMTP and enables that node.
+- No social publishing, payments, image generation, or multi-region setup.
+
+## Next improvements
+
+1. Add Postgres row-level security on brand and library tables, so a Django bug cannot read another workspace even if a query forgets the filter.
+2. Switch Storage to a private bucket and serve previews with short-lived signed URLs.
+3. Paginate the library and add filters for type and folder, and put a per-user limit on Gemini calls.
+
+## Tests
+
+```
+python backend/manage.py check
+cd backend && python -m pytest
+cd frontend && npm run build
+```
+
+Pytest covers health, workspace provisioning, storage path checks, activity scoping, folder-not-empty deletion, trash and permanent delete, AI JSON validation, and webhook payload shape.
+
+## Production
+
+API on Railway. Frontend on Vercel. Auth, Postgres, and Storage stay on Supabase.
+
+`GET /api/health` is public. Railway healthcheck path: `/api/health`.
+
+### Railway (Django)
+
+| Railway UI field | Value |
+| --- | --- |
+| Root Directory | `backend` |
+| Builder | Railpack |
+| Start command | leave empty to use `railway.toml` |
+| Healthcheck path | `/api/health` |
+
+`backend/runtime.txt` pins Python 3.12 for Railpack. Before each deploy, Railway runs `python manage.py migrate --noinput`. The start command runs `collectstatic` so WhiteNoise can serve `/static/`.
+
+| Variable | Production value |
+| --- | --- |
+| `DEBUG` | `False` |
+| `DJANGO_SECRET_KEY` | long random string, not committed |
+| `DATABASE_URL` | Supabase **session** pooler URI, port **5432**. Not the transaction pooler on 6543. |
+| `DATABASE_SSLMODE` | `require` |
+| `ALLOWED_HOSTS` | `brandvault-production.up.railway.app` |
+| `CORS_ALLOWED_ORIGINS` | `https://brandvault-omega.vercel.app` |
+| `CSRF_TRUSTED_ORIGINS` | `https://brandvault-omega.vercel.app` |
+| `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `SUPABASE_JWT_SECRET` | empty, so JWTs verify with JWKS |
+| `SUPABASE_STORAGE_BUCKET` | `assets` |
+| `SUPABASE_SERVICE_ROLE_KEY` | empty |
+| `GEMINI_API_KEY` | set on Railway only |
+| `N8N_WEBHOOK_URL` | empty to disable, or the n8n production webhook URL |
+
+### Vercel (Vite)
+
+| Vercel UI field | Value |
+| --- | --- |
+| Framework Preset | Vite |
+| Root Directory | `frontend` |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+
+`frontend/vercel.json` rewrites paths to `/index.html`.
+
+| Variable | Production value |
+| --- | --- |
+| `VITE_API_URL` | `https://brandvault-production.up.railway.app` |
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+| `VITE_STORAGE_BUCKET` | `assets` |
+
+Vite reads `VITE_*` at build time. Changing them needs a new Vercel deployment.
+
+### Supabase Auth URLs
+
+- Site URL: `https://brandvault-omega.vercel.app`
+- Redirect URLs: that origin, plus `http://localhost:5173` and `http://localhost:5173/**`
+
+### Storage policies
+
+Paths (the second folder is the Supabase Auth user id, `auth.uid()`):
 
 ```
 workspaces/{supabase_user_id}/assets/{asset_id}/{filename}
 workspaces/{supabase_user_id}/brand/logo.{ext}
 ```
 
-Asset rows are still scoped by workspace in Postgres. `GET /api/me` returns `workspace_id`, `supabase_user_id`, `storage_bucket`, and `storage_prefix`.
-
-1. Supabase → Storage → New bucket.
-2. Name: `assets` (same value as `SUPABASE_STORAGE_BUCKET` and `VITE_STORAGE_BUCKET`).
-3. Public bucket: on, so image previews can use the public URL.
-4. File size limit: 20 MB.
-5. Allowed MIME types: leave empty, or restrict to the types you want in the forms (`image/*`, `video/*`, pdf, fonts).
-6. Supabase → SQL Editor. Run the policies below. If the bucket already exists, the insert updates it.
+Bucket `assets`, public, 20 MB limit. Run in the Supabase SQL editor:
 
 ```sql
 insert into storage.buckets (id, name, public, file_size_limit)
@@ -109,155 +297,4 @@ using (
 );
 ```
 
-A public bucket serves `getPublicUrl` without a SELECT policy. The SELECT policy is what lets the signed-in user list their own prefix. Writes still require the insert/update policies. Upsert needs both insert and update.
-
-If those policies are missing, the asset form shows a 403 and tells you to create the bucket and run this SQL. Django will not store a silent broken row: a failed create-upload is moved to trash.
-
-Pasting an HTTPS URL still creates an asset with no `storage_path`. Django rejects any client `storage_path` that it did not mint, and another workspace's asset id returns 404.
-
-## Demo sign-in
-
-The login page includes **Continue as demo**. It signs in through Supabase as `demo@brandvault.dev` with the assignment password `Demo1234!`. Django still checks the JWT. This is not an API bypass.
-
-## Google sign-in
-
-**Continue with Google** is optional. No other providers are used. If Google is not enabled in Supabase, the button shows the error on the login form.
-
-1. Supabase → Authentication → Providers → Google. Enable it and paste the Google OAuth client ID and secret.
-2. In Google Cloud, set the authorized redirect URI to `https://<project-ref>.supabase.co/auth/v1/callback`.
-3. Supabase → Authentication → URL Configuration. Add the deployed site URL and `http://localhost:5173` to the site URL and redirect allow list.
-
-## Production
-
-API on Railway. Frontend on Vercel. Auth, Postgres, and Storage stay on the existing Supabase project. n8n is optional and stays off until `N8N_WEBHOOK_URL` is set on the API.
-
-`GET /api/health` stays public. Railway healthcheck path: `/api/health`.
-
-### Railway (Django)
-
-Create a service from this repo.
-
-| Railway UI field | Value |
-| --- | --- |
-| Root Directory | `backend` |
-| Builder | Railpack (the default). Leave Nixpacks alone; it is deprecated. |
-| Start command | leave empty to use `railway.toml`, or `python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --threads 4` |
-| Healthcheck path | `/api/health` |
-| Watch paths | leave default |
-
-`backend/runtime.txt` and `backend/.python-version` pin Python 3.12 for Railpack. Local dev can stay on 3.14. `backend/Procfile` matches the start command. Before each deploy, Railway runs `python manage.py migrate --noinput` (`preDeployCommand` in `backend/railway.toml`). The start command runs `collectstatic` in the web process so WhiteNoise can serve `/static/` (admin). The API itself is JSON. If the service settings do not pick up `railway.toml`, set the start command and healthcheck path in the table below by hand.
-
-Set variables on the Railway service before the first deploy. `DEBUG=False` requires `DJANGO_SECRET_KEY` and `DATABASE_URL`.
-
-| Variable | Production value |
-| --- | --- |
-| `DEBUG` | `False` |
-| `DJANGO_SECRET_KEY` | long random string (generate locally; do not commit) |
-| `DATABASE_URL` | Supabase **session** pooler URI. Host looks like `aws-0-<region>.pooler.supabase.com`, user `postgres.<project-ref>`, port **5432**. Do not use the transaction pooler (port 6543). |
-| `DATABASE_SSLMODE` | `require` |
-| `ALLOWED_HOSTS` | the Railway hostname, e.g. `brandvault-api.up.railway.app` (no scheme). `RAILWAY_PUBLIC_DOMAIN` is appended automatically when Railway sets it. |
-| `CORS_ALLOWED_ORIGINS` | the Vercel origin, e.g. `https://brandvault.vercel.app` (scheme required, no trailing slash) |
-| `CSRF_TRUSTED_ORIGINS` | same https origin as CORS |
-| `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
-| `SUPABASE_JWT_SECRET` | leave **empty** so JWTs verify with the project JWKS (ES256/RS256) |
-| `SUPABASE_STORAGE_BUCKET` | `assets` |
-| `SUPABASE_SERVICE_ROLE_KEY` | leave empty (uploads use the user JWT in the browser) |
-| `GEMINI_API_KEY` | optional |
-| `N8N_WEBHOOK_URL` | leave **empty** to disable notifications. To turn them on, paste the n8n production webhook URL (see below). Django only. |
-| `USE_X_FORWARDED_PROTO` | omit it; it turns on when `DEBUG=False` |
-
-Generate a secret locally if you need one: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-
-Manual migrate (Railway shell, working directory is `backend`): `python manage.py migrate`.
-
-### Vercel (Vite)
-
-Create a project from this repo.
-
-| Vercel UI field | Value |
-| --- | --- |
-| Framework Preset | Vite |
-| Root Directory | `frontend` |
-| Build Command | `npm run build` |
-| Output Directory | `dist` |
-| Install Command | `npm install` |
-
-`frontend/vercel.json` rewrites every path to `/index.html`, so refreshing `/brand`, `/library`, `/trash`, or `/login` stays on the SPA.
-
-Set these **before** the production build. Vite reads them at build time. A later env change needs a new deployment.
-
-| Variable | Production value |
-| --- | --- |
-| `VITE_API_URL` | Railway public origin, e.g. `https://brandvault-api.up.railway.app` (no trailing slash) |
-| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
-| `VITE_STORAGE_BUCKET` | `assets` |
-
-### Order (CORS)
-
-The browser origin does not exist until Vercel finishes, and the API origin does not exist until Railway finishes.
-
-1. Deploy the API on Railway with the variables above. For the first boot, `CORS_ALLOWED_ORIGINS` can be `http://localhost:5173` if the Vercel URL is not known yet.
-2. Deploy the frontend on Vercel with `VITE_API_URL` set to the Railway `https://…` origin.
-3. Set Railway `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` to that exact Vercel origin (`https://…`, no path).
-4. Redeploy the API (changing Railway variables restarts the service). Changing a `VITE_*` value needs a Vercel redeploy.
-
-### Supabase Auth URLs
-
-Supabase → Authentication → URL Configuration:
-
-- Site URL: the Vercel origin.
-- Redirect URLs: that origin, plus `http://localhost:5173` and `http://localhost:5173/**`.
-
-Demo login on the live site: `demo@brandvault.dev` / `Demo1234!`.
-
-## Optional n8n bonus
-
-Django POSTs a JSON webhook after the database commit when one of these happens. A down n8n does not fail the save, restore, or brand update. Leave `N8N_WEBHOOK_URL` empty and nothing is sent.
-
-| Event | When |
-| --- | --- |
-| `brand.updated` | Brand kit PATCH succeeds |
-| `asset.restored` | Asset is restored from trash |
-| `asset.ai_tags_saved` | Reviewed AI tags are saved |
-
-```json
-{
-  "event": "asset.ai_tags_saved",
-  "timestamp": "2026-09-27T17:00:00+00:00",
-  "asset_id": "11111111-1111-1111-1111-111111111111",
-  "user_email": "demo@brandvault.dev"
-}
-```
-
-`brand.updated` sends `brand_id` instead of `asset_id`. The other two fields stay the same.
-
-Workflow file: `n8n/brandvault-webhook.json`.
-
-It is Webhook (POST) → Log event (no-op; the n8n execution list is the log) → Respond to Webhook (`ok`) → Send Email. Send Email is disabled and uses placeholder addresses only. No SMTP secret is in the file. Leave that node off unless you attach your own SMTP credential in n8n.
-
-`N8N_WEBHOOK_URL` belongs on Django (local `backend/.env` or the Railway service). Do not put it on Vercel. Empty means disabled. Examples in `.env.example` and `backend/.env.example` stay empty.
-
-Import and activate on n8n Cloud:
-
-1. Open [n8n Cloud](https://app.n8n.cloud/) and sign in.
-2. Left nav: **Workflows**.
-3. Top right: **Create workflow** (the canvas can be blank).
-4. Top right: the **⋯** menu → **Import from file**.
-5. Choose `n8n/brandvault-webhook.json` from this repo.
-6. Top right: **Save**.
-7. Top right: switch **Inactive** to **Active**. Confirm if n8n asks.
-8. Open the **Webhook** node. Copy the **Production URL** (`https://<your-instance>.app.n8n.cloud/webhook/brandvault`). Do not use the Test URL.
-9. Railway → the Django service → **Variables** → set `N8N_WEBHOOK_URL` to that production URL. Redeploy or restart if Railway does not reload env on its own.
-10. To turn notifications off again, clear `N8N_WEBHOOK_URL` on Railway. Do not commit the URL.
-
-Check a run: n8n → **Executions**. A successful brand save, trash restore, or AI-tag save shows the event, id, email, and timestamp on **Log event**.
-
-## Useful commands
-
-```
-python backend/manage.py check
-python backend/manage.py test
-cd backend && python -m pytest
-cd frontend && npm run build
-```
+A failed create-upload is moved to trash so Django does not keep a row with a missing file. Pasting an HTTPS URL still creates an asset with no `storage_path`.

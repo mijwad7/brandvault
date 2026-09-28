@@ -93,10 +93,10 @@ def _postgres_config(database_url: str) -> dict:
         "PASSWORD": unquote(parsed.password or ""),
         "HOST": parsed.hostname or "",
         "PORT": str(parsed.port or 5432),
-        # Reuse the session-pooler connection. Default 0 opens a new TLS
-        # connection on every request, which is the multi-hundred-ms tax on
-        # each API call from Railway to Supabase.
-        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+        # Close after each request. Supabase's session pooler allows 15
+        # clients; holding a connection open fills that pool and the next
+        # request fails. Set DB_CONN_MAX_AGE only if the pool is larger.
+        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "0")),
         "OPTIONS": {"sslmode": sslmode},
     }
 
