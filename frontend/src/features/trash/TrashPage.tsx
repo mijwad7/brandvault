@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../../components/layout/PageHeader.tsx'
 import { Button } from '../../components/ui/Button.tsx'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog.tsx'
 import { EmptyState } from '../../components/ui/EmptyState.tsx'
 import { FormAlert } from '../../components/ui/Field.tsx'
 import { Icon, type IconName } from '../../components/ui/icons.tsx'
@@ -9,6 +10,7 @@ import { Skeleton } from '../../components/ui/Skeleton.tsx'
 import { useToast } from '../../components/ui/useToast.ts'
 import { useApi } from '../../hooks/useApi.ts'
 import { getApiErrorMessage, isInlineApiError, readApiErrors } from '../../lib/api.ts'
+import { removeStorageObject } from '../../lib/storage.ts'
 import type { Asset, AssetType } from '../../types/index.ts'
 
 const typeLabels: Record<AssetType, string> = {
@@ -48,7 +50,9 @@ export function TrashPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
-  const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Asset | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -78,7 +82,7 @@ export function TrashPage() {
   }, [api, reloadKey])
 
   async function restore(asset: Asset) {
-    setRestoringId(asset.id)
+    setPendingId(asset.id)
     setActionError('')
     try {
       await api.post(`/assets/${asset.id}/restore`)
@@ -88,19 +92,50 @@ export function TrashPage() {
       if (!isInlineApiError(caught)) {
         toast.error(parsed.form || 'Could not restore that asset.')
       }
-      setRestoringId(null)
+      setPendingId(null)
       return
     }
     toast.success(`Restored “${asset.name}”.`)
     setAssets((current) => current.filter((item) => item.id !== asset.id))
-    setRestoringId(null)
+    setPendingId(null)
+  }
+
+  async function deleteForever(asset: Asset) {
+    setPendingId(asset.id)
+    setDeleteError('')
+    try {
+      await api.delete(`/assets/${asset.id}`)
+    } catch (caught) {
+      const parsed = readApiErrors(caught)
+      setDeleteError(parsed.form || getApiErrorMessage(caught))
+      if (!isInlineApiError(caught)) {
+        toast.error(parsed.form || 'Could not delete that asset.')
+      }
+      setPendingId(null)
+      return
+    }
+    if (asset.storage_bucket && asset.storage_path) {
+      try {
+        await removeStorageObject(asset.storage_bucket, asset.storage_path)
+      } catch {
+        toast.error(`Deleted “${asset.name}”. The stored file could not be removed.`)
+        setAssets((current) => current.filter((item) => item.id !== asset.id))
+        setPendingDelete(null)
+        setPendingId(null)
+        return
+      }
+    }
+    toast.success(`Deleted “${asset.name}”.`)
+    setAssets((current) => current.filter((item) => item.id !== asset.id))
+    setPendingDelete(null)
+    setPendingId(null)
   }
 
   return (
     <section>
       <PageHeader
         title="Trash"
-        description="Items you remove stay here until you put them back."
+        description="Restore an item, or delete it for good."
       />
 
       {loading ? (
@@ -167,17 +202,31 @@ export function TrashPage() {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="secondary"
-                      className="w-full sm:w-auto"
-                      disabled={restoringId === asset.id}
-                      onClick={() => {
-                        void restore(asset)
-                      }}
-                    >
-                      <Icon name="undo" />
-                      {restoringId === asset.id ? 'Restoring…' : 'Restore'}
-                    </Button>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                      <Button
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        disabled={pendingId !== null}
+                        onClick={() => {
+                          void restore(asset)
+                        }}
+                      >
+                        <Icon name="undo" />
+                        {pendingId === asset.id && pendingDelete === null ? 'Restoring…' : 'Restore'}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        className="w-full sm:w-auto"
+                        disabled={pendingId !== null}
+                        onClick={() => {
+                          setDeleteError('')
+                          setPendingDelete(asset)
+                        }}
+                      >
+                        <Icon name="trash" />
+                        Delete
+                      </Button>
+                    </div>
                   </li>
                 )
               })}
@@ -185,6 +234,26 @@ export function TrashPage() {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={pendingDelete ? `Delete “${pendingDelete.name}” forever?` : 'Delete asset'}
+        description="This removes it from Trash. You can’t restore it."
+        confirmLabel="Delete forever"
+        pending={pendingId !== null}
+        error={deleteError}
+        onConfirm={() => {
+          if (pendingDelete) {
+            void deleteForever(pendingDelete)
+          }
+        }}
+        onClose={() => {
+          if (pendingId === null) {
+            setPendingDelete(null)
+            setDeleteError('')
+          }
+        }}
+      />
     </section>
   )
 }

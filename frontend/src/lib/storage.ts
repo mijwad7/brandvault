@@ -62,6 +62,23 @@ export function joinStoragePath(prefix: string, name: string): string {
   return `${base}${name.replace(/^\/+/, '')}`
 }
 
+export async function removeStorageObject(bucket: string, path: string): Promise<void> {
+  if (!bucket || !path) {
+    return
+  }
+  const supabase = getSupabase()
+  if (!supabase) {
+    throw new StorageUploadError('The stored file could not be removed.', null)
+  }
+  const { error } = await supabase.storage.from(bucket).remove([path])
+  if (error) {
+    throw new StorageUploadError(
+      error.message || 'The stored file could not be removed.',
+      statusFrom(error),
+    )
+  }
+}
+
 export async function uploadStorageObject(
   bucket: string,
   path: string,

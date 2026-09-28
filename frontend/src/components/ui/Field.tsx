@@ -94,3 +94,48 @@ export function FormAlert({ message }: { message: string }) {
     </p>
   )
 }
+
+type FileFieldProps = {
+  label: string
+  hint?: string
+  error?: string
+  accept?: string
+  fileName?: string
+  inputKey?: string | number
+  onChange: (file: File | null) => void
+}
+
+export function FileField({ label, hint, error, accept, fileName, inputKey, onChange }: FileFieldProps) {
+  return (
+    <FieldChrome label={label} error={error} hint={hint}>
+      {({ id, describedBy }) => (
+        <div
+          className={cn(
+            'flex h-11 items-center gap-3 rounded-xl border border-line bg-surface pr-3 pl-1.5',
+            error && 'border-danger',
+          )}
+        >
+          <input
+            key={inputKey}
+            id={id}
+            type="file"
+            accept={accept}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+            className="sr-only"
+            onChange={(event) => {
+              onChange(event.target.files?.[0] ?? null)
+            }}
+          />
+          <label
+            htmlFor={id}
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-lg bg-muted-surface px-3 text-sm font-medium text-ink"
+          >
+            Choose file
+          </label>
+          <span className="min-w-0 truncate text-sm text-muted">{fileName || 'No file chosen'}</span>
+        </div>
+      )}
+    </FieldChrome>
+  )
+}

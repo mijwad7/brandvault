@@ -621,10 +621,10 @@ export function AssetsPage() {
             ) : (
               <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {assets.map((asset) => (
-                  <li key={asset.id}>
+                  <li key={asset.id} className="flex">
                     <article
                       className={cn(
-                        'relative overflow-hidden rounded-2xl border border-line bg-surface',
+                        'relative flex w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface',
                         drag?.assetId === asset.id && 'opacity-60',
                       )}
                     >
@@ -637,7 +637,7 @@ export function AssetsPage() {
                         <Icon name="grip" />
                       </button>
                       <AssetVisual asset={asset} />
-                      <div className="space-y-3 p-3">
+                      <div className="flex flex-1 flex-col gap-3 p-3">
                         <div className="min-w-0">
                           <h3 className="truncate font-medium text-ink">{asset.name}</h3>
                           <p className="mt-0.5 text-xs font-medium tracking-wide text-muted uppercase">
@@ -676,29 +676,31 @@ export function AssetsPage() {
                             <Icon name="external" className="size-3.5" />
                           </a>
                         ) : null}
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="w-full"
-                          disabled={generatingId === asset.id}
-                          onClick={() => {
-                            void generateTags(asset)
-                          }}
-                        >
-                          {generatingId === asset.id ? 'Generating…' : 'Generate tags'}
-                        </Button>
-                        <div className="flex gap-2">
-                          <Button variant="secondary" size="sm" className="flex-1" onClick={() => openEdit(asset)}>
-                            Edit
-                          </Button>
+                        <div className="mt-auto flex flex-col gap-2">
                           <Button
                             variant="secondary"
                             size="sm"
-                            className="flex-1"
-                            onClick={() => askConfirm({ kind: 'asset', asset })}
+                            className="w-full"
+                            disabled={generatingId === asset.id}
+                            onClick={() => {
+                              void generateTags(asset)
+                            }}
                           >
-                            Trash
+                            {generatingId === asset.id ? 'Generating…' : 'Generate tags'}
                           </Button>
+                          <div className="flex gap-2">
+                            <Button variant="secondary" size="sm" className="flex-1" onClick={() => openEdit(asset)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => askConfirm({ kind: 'asset', asset })}
+                            >
+                              Trash
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </article>
@@ -812,11 +814,14 @@ export function AssetsPage() {
         }
         description={
           confirm?.kind === 'folder'
-            ? 'This only works when the folder is empty. Move assets and subfolders out first.'
+            ? confirm.folder.has_contents
+              ? 'This only works when the folder is empty. Move assets and subfolders out first.'
+              : 'This permanently deletes the empty folder.'
             : 'You can restore it later from Trash.'
         }
         confirmLabel={confirm?.kind === 'folder' ? 'Delete folder' : 'Move to trash'}
         pending={confirmPending}
+        confirmDisabled={confirm?.kind === 'folder' && confirm.folder.has_contents}
         error={confirmError}
         onConfirm={() => {
           void runConfirm()

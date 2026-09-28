@@ -8,6 +8,7 @@ type ConfirmDialogProps = {
   description: string
   confirmLabel: string
   pending?: boolean
+  confirmDisabled?: boolean
   error?: string
   onConfirm: () => void
   onClose: () => void
@@ -19,6 +20,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   pending = false,
+  confirmDisabled = false,
   error = '',
   onConfirm,
   onClose,
@@ -30,7 +32,12 @@ export function ConfirmDialog({
         <Button variant="secondary" className="w-full" data-autofocus="" onClick={onClose} disabled={pending}>
           Cancel
         </Button>
-        <Button variant="danger" className="w-full" onClick={onConfirm} disabled={pending}>
+        <Button
+          variant="danger"
+          className="w-full"
+          onClick={onConfirm}
+          disabled={pending || confirmDisabled}
+        >
           {pending ? 'Working…' : confirmLabel}
         </Button>
       </div>

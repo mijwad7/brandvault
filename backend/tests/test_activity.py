@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import Account, Workspace
@@ -47,6 +48,64 @@ def test_trash_writes_activity_for_that_workspace_only():
 def test_activity_requires_authentication():
     response = APIClient().get("/api/activity")
     assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_permanent_delete_only_removes_trashed_assets():
+    owner = make_account("owner@brandvault.dev")
+    other = make_account("other@brandvault.dev")
+    client = auth_client(owner)
+    alive = Asset.objects.create(
+        workspace=owner.workspace,
+        name="Still here",
+        type=Asset.Type.IMAGE,
+        url="https://example.com/alive.png",
+    )
+    trashed = Asset.objects.create(
+        workspace=owner.workspace,
+        name="Gone",
+        type=Asset.Type.DOCUMENT,
+        url="https://example.com/gone.pdf",
+        deleted_at=timezone.now(),
+    )
+
+    blocked = client.delete(f"/api/assets/{alive.id}")
+    assert blocked.status_code == 404
+    assert Asset.objects.filter(id=alive.id).exists()
+
+    forbidden = auth_client(other).delete(f"/api/assets/{trashed.id}")
+    assert forbidden.status_code == 404
+
+    deleted = client.delete(f"/api/assets/{trashed.id}")
+    assert deleted.status_code == 204
+    assert not Asset.objects.filter(id=trashed.id).exists()
+
+    log = client.get("/api/activity")
+    assert log.data[0]["action"] == "asset.deleted"
+    assert log.data[0]["summary"] == "Asset “Gone” permanently deleted by owner@brandvault.dev"
+
+
+@pytest.mark.django_db
+def test_folder_with_contents_reports_has_contents_and_cannot_be_deleted():
+    account = make_account("owner@brandvault.dev")
+    client = auth_client(account)
+    created = client.post("/api/folders", {"name": "Lookbook"}, format="json")
+    assert created.status_code == 201
+    assert created.data["has_contents"] is False
+    Asset.objects.create(
+        workspace=account.workspace,
+        folder_id=created.data["id"],
+        name="Cover",
+        type=Asset.Type.IMAGE,
+        url="https://example.com/cover.png",
+    )
+
+    listed = client.get("/api/folders")
+    assert listed.status_code == 200
+    assert listed.data[0]["has_contents"] is True
+
+    deleted = client.delete(f"/api/folders/{created.data['id']}")
+    assert deleted.status_code == 409
 
 
 @pytest.mark.django_db

@@ -6,6 +6,7 @@ _SENTENCES = {
     Activity.Action.ASSET_MOVED: "Asset “{name}” moved by {actor}",
     Activity.Action.ASSET_TRASHED: "Asset “{name}” trashed by {actor}",
     Activity.Action.ASSET_RESTORED: "Asset “{name}” restored by {actor}",
+    Activity.Action.ASSET_DELETED: "Asset “{name}” permanently deleted by {actor}",
     Activity.Action.ASSET_TAGS_SAVED: "Asset “{name}” tags saved by {actor}",
     Activity.Action.FOLDER_CREATED: "Folder “{name}” created by {actor}",
     Activity.Action.FOLDER_DELETED: "Folder “{name}” deleted by {actor}",

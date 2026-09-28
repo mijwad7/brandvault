@@ -15,6 +15,7 @@ class Activity(models.Model):
         ASSET_MOVED = "asset.moved", "Asset moved"
         ASSET_TRASHED = "asset.trashed", "Asset trashed"
         ASSET_RESTORED = "asset.restored", "Asset restored"
+        ASSET_DELETED = "asset.deleted", "Asset deleted"
         ASSET_TAGS_SAVED = "asset.ai_tags_saved", "Asset tags saved"
         FOLDER_CREATED = "folder.created", "Folder created"
         FOLDER_DELETED = "folder.deleted", "Folder deleted"

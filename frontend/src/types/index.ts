@@ -24,6 +24,7 @@ export type Folder = {
   id: string
   name: string
   parent: string | null
+  has_contents: boolean
   created_at: string
   updated_at: string
 }

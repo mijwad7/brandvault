@@ -19,6 +19,7 @@
   --bv-danger-soft: #f8e7e4;
   --bv-ok: #1d6b45;
   --bv-ok-soft: #e4f3ea;
+  --bv-scrim: rgb(28 25 21 / 0.48);
 }
 
 .dark {
@@ -33,11 +34,12 @@
   --bv-accent: #e0b36a;
   --bv-accent-ink: #1c1408;
   --bv-clay: #d98962;
-  --bv-danger: #f0b0a8;
-  --bv-danger-ink: #2c1412;
+  --bv-danger: #c45c54;
+  --bv-danger-ink: #fff8f6;
   --bv-danger-soft: #3a2422;
   --bv-ok: #9ed7b4;
   --bv-ok-soft: #1a2e24;
+  --bv-scrim: rgb(0 0 0 / 0.64);
 }
 
 @theme inline {
@@ -58,6 +60,7 @@
   --color-danger-soft: var(--bv-danger-soft);
   --color-ok: var(--bv-ok);
   --color-ok-soft: var(--bv-ok-soft);
+  --color-scrim: var(--bv-scrim);
 }
 
 @layer base {
@@ -138,6 +141,12 @@ body {
 @media (min-width: 768px) {
   .bv-sheet {
     animation-name: bv-sheet-side;
+  }
+}
+
+@media (max-width: 767px) and (max-height: 640px) {
+  .login-form button {
+    height: 2.5rem;
   }
 }
 

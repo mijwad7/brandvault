@@ -109,7 +109,7 @@ export function Dialog({
     <div className="fixed inset-0 z-50">
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-ink/40"
+        className="absolute inset-0 bg-scrim"
         onClick={() => onCloseRef.current()}
       />
       <div

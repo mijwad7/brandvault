@@ -26,10 +26,19 @@ class ActivitySerializer(serializers.ModelSerializer):
 
 
 class FolderSerializer(serializers.ModelSerializer):
+    has_contents = serializers.SerializerMethodField()
+
     class Meta:
         model = Folder
-        fields = ("id", "name", "parent", "created_at", "updated_at")
-        read_only_fields = ("id", "created_at", "updated_at")
+        fields = ("id", "name", "parent", "has_contents", "created_at", "updated_at")
+        read_only_fields = ("id", "has_contents", "created_at", "updated_at")
+
+    def get_has_contents(self, folder):
+        has_child = getattr(folder, "_has_child", None)
+        has_asset = getattr(folder, "_has_asset", None)
+        if has_child is None or has_asset is None:
+            return folder.children.exists() or folder.assets.exists()
+        return bool(has_child or has_asset)
 
     def validate_parent(self, parent):
         workspace = self.context["request"].user.workspace

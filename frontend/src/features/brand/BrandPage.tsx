@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { PageHeader } from '../../components/layout/PageHeader.tsx'
 import { Button } from '../../components/ui/Button.tsx'
 import { EmptyState } from '../../components/ui/EmptyState.tsx'
-import { controlClass, FormAlert, TextField } from '../../components/ui/Field.tsx'
+import { controlClass, FileField, FormAlert, TextField } from '../../components/ui/Field.tsx'
 import { Skeleton } from '../../components/ui/Skeleton.tsx'
 import { useToast } from '../../components/ui/useToast.ts'
 import { useApi } from '../../hooks/useApi.ts'
@@ -213,27 +213,18 @@ export function BrandPage() {
             hint="For example, Georgia or Arial."
           />
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink" htmlFor="brand-logo-file">
-              Logo file
-            </label>
-            <input
-              key={logoInputKey}
-              id="brand-logo-file"
-              className="block w-full text-sm text-ink file:mr-3 file:h-11 file:rounded-xl file:border-0 file:bg-muted-surface file:px-3 file:text-sm file:font-medium file:text-ink"
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null
-                setLogoFile(file)
-                setLogoError('')
-              }}
-            />
-            <p className="mt-1.5 text-xs leading-relaxed text-muted">
-              Optional. An image up to 20 MB. Uploading a file replaces the link below.
-            </p>
-            {logoError ? <p className="mt-1.5 text-sm text-danger">{logoError}</p> : null}
-          </div>
+          <FileField
+            label="Logo file"
+            accept="image/*"
+            inputKey={logoInputKey}
+            fileName={logoFile?.name}
+            hint="Optional. An image up to 20 MB. Uploading a file replaces the link below."
+            error={logoError}
+            onChange={(file) => {
+              setLogoFile(file)
+              setLogoError('')
+            }}
+          />
 
           <TextField
             label="Logo URL"

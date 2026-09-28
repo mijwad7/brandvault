@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -34,8 +35,15 @@ class FolderViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
-        return Folder.objects.filter(workspace=self.get_workspace()).select_related(
-            "parent"
+        children = Folder.objects.filter(parent_id=OuterRef("pk"))
+        held_assets = Asset.objects.filter(folder_id=OuterRef("pk"))
+        return (
+            Folder.objects.filter(workspace=self.get_workspace())
+            .select_related("parent")
+            .annotate(
+                _has_child=Exists(children),
+                _has_asset=Exists(held_assets),
+            )
         )
 
     def perform_create(self, serializer):
@@ -65,7 +73,7 @@ class FolderViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
 
 class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
     serializer_class = AssetSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def perform_create(self, serializer):
         with transaction.atomic():
@@ -116,7 +124,7 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
             else:
                 qs = qs.order_by("-updated_at")
             return qs
-        if self.action == "restore":
+        if self.action in {"restore", "destroy"}:
             return qs.trashed()
         if self.action in {"trash", "partial_update", "update"}:
             return qs.alive()
@@ -152,6 +160,19 @@ class AssetViewSet(WorkspaceScopedMixin, viewsets.ModelViewSet):
                 },
             )
         return Response(AssetSerializer(asset).data)
+
+    def perform_destroy(self, instance):
+        name = instance.name
+        workspace = instance.workspace
+        email = self.request.user.email
+        with transaction.atomic():
+            instance.delete()
+            record_activity(
+                workspace=workspace,
+                action=Activity.Action.ASSET_DELETED,
+                subject_name=name,
+                actor_email=email,
+            )
 
     @action(detail=True, methods=["post"], url_path="ai-tags")
     def ai_tags(self, request, pk=None):

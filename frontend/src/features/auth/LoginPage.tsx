@@ -144,20 +144,20 @@ export function LoginPage() {
   }
 
   return (
-    <main className="relative min-h-svh bg-bg text-ink">
-      <div className="absolute top-4 right-4 z-10">
+    <main className="relative h-svh overflow-hidden bg-bg text-ink">
+      <div className="absolute top-3 right-3 z-10 md:top-4 md:right-4">
         <ThemeToggle />
       </div>
-      <div className="mx-auto grid min-h-svh max-w-6xl md:grid-cols-2">
-        <section className="flex flex-col justify-end px-6 pt-20 pb-6 md:justify-center md:px-12 md:py-16">
+      <div className="mx-auto flex h-full max-w-6xl flex-col justify-center md:grid md:grid-cols-2">
+        <section className="flex shrink-0 flex-col justify-end px-6 pt-12 pb-2 [@media(max-width:767px)_and_(max-height:640px)]:pt-10 [@media(max-width:767px)_and_(max-height:640px)]:pb-1 md:justify-center md:px-12 md:py-16">
           <div className="flex items-center gap-2.5">
             <Mark />
             <p className="text-sm font-medium tracking-wide text-muted">BrandVault</p>
           </div>
-          <h1 className="mt-5 max-w-md font-serif text-4xl leading-[1.05] tracking-tight md:text-5xl">
+          <h1 className="mt-2 max-w-md font-serif text-[1.7rem] leading-[1.08] tracking-tight min-[400px]:text-3xl [@media(max-width:767px)_and_(max-height:640px)]:mt-1 [@media(max-width:767px)_and_(max-height:640px)]:text-2xl md:mt-5 md:text-5xl md:leading-[1.05]">
             A library for the brand, not a pile of files.
           </h1>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted">
+          <p className="mt-1.5 max-w-sm text-sm leading-snug text-muted [@media(max-width:767px)_and_(max-height:640px)]:hidden md:mt-4 md:block md:leading-relaxed">
             Your brand kit, folders, and files, in one place.
           </p>
           <div className="mt-10 hidden items-end gap-3 md:flex" aria-hidden="true">
@@ -167,14 +167,16 @@ export function LoginPage() {
           </div>
         </section>
 
-        <section className="flex items-start px-4 pb-10 md:items-center md:px-10">
+        <section className="flex shrink-0 items-start px-4 pt-3 pb-4 md:items-center md:px-10 md:py-16">
           <form
-            className="w-full rounded-3xl border border-line bg-surface p-5 shadow-xl md:p-8"
+            className="login-form w-full rounded-3xl border border-line bg-surface p-3.5 shadow-xl md:p-8"
             onSubmit={onSubmit}
           >
-            <h2 className="font-serif text-2xl tracking-tight">Sign in</h2>
-            <p className="mt-1 text-sm text-muted">Use your email and password.</p>
-            <div className="mt-6 space-y-4">
+            <h2 className="font-serif text-xl tracking-tight md:text-2xl">Sign in</h2>
+            <p className="mt-0.5 text-sm text-muted [@media(max-width:767px)_and_(max-height:640px)]:hidden md:mt-1 md:block">
+              Use your email and password.
+            </p>
+            <div className="mt-3 space-y-2.5 md:mt-6 md:space-y-4">
               <TextField
                 label="Email"
                 type="email"
@@ -196,7 +198,7 @@ export function LoginPage() {
                 aria-invalid={error ? true : undefined}
               />
               <FormAlert message={error} />
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex gap-2">
                 <Button className="w-full" type="submit" disabled={pending !== null}>
                   {pending === 'signin' ? 'Signing in…' : 'Sign in'}
                 </Button>

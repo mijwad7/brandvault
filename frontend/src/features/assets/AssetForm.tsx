@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '../../components/ui/Button.tsx'
-import { FormAlert, SelectField, TextField } from '../../components/ui/Field.tsx'
+import { FormAlert, FileField, SelectField, TextField } from '../../components/ui/Field.tsx'
 import { cn } from '../../lib/cn.ts'
 import { isPreviewableImage } from '../../lib/storage.ts'
 import { ASSET_TYPES, type AssetType, type Folder } from '../../types/index.ts'
@@ -109,30 +109,18 @@ export function AssetForm({
         </div>
       </div>
       {values.sourceMode === 'upload' ? (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink" htmlFor="asset-file">
-            File
-          </label>
-          <input
-            id="asset-file"
-            className={cn(
-              'block w-full text-sm text-ink file:mr-3 file:h-11 file:rounded-xl file:border-0 file:bg-muted-surface file:px-3 file:text-sm file:font-medium file:text-ink',
-              fieldErrors.file && 'text-danger',
-            )}
-            type="file"
-            accept={acceptFor[values.type]}
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null
-              onChange({ ...values, file })
-            }}
-          />
-          <p className="mt-1.5 text-xs leading-relaxed text-muted">
-            {storedFileName
+        <FileField
+          label="File"
+          accept={acceptFor[values.type]}
+          fileName={values.file?.name || storedFileName}
+          error={fieldErrors.file}
+          hint={
+            storedFileName && !values.file
               ? `Current file: ${storedFileName}. Choose a new one to replace it. Up to 20 MB.`
-              : 'Up to 20 MB. Or paste a link instead.'}
-          </p>
-          {fieldErrors.file ? <p className="mt-1.5 text-sm text-danger">{fieldErrors.file}</p> : null}
-        </div>
+              : 'Up to 20 MB. Or paste a link instead.'
+          }
+          onChange={(file) => onChange({ ...values, file })}
+        />
       ) : (
         <TextField
           label="Link"
