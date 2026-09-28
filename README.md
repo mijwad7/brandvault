@@ -140,7 +140,7 @@ Create a service from this repo.
 | --- | --- |
 | Root Directory | `backend` |
 | Builder | Railpack (the default). Leave Nixpacks alone; it is deprecated. |
-| Start command | leave empty to use `railway.toml`, or `python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT` |
+| Start command | leave empty to use `railway.toml`, or `python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --threads 4` |
 | Healthcheck path | `/api/health` |
 | Watch paths | leave default |
 
