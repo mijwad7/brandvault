@@ -104,7 +104,7 @@ export function AssetForm({
             Upload file
           </ModeButton>
           <ModeButton checked={values.sourceMode === 'url'} onClick={() => setMode('url')}>
-            Paste URL
+            Paste a link
           </ModeButton>
         </div>
       </div>
@@ -128,21 +128,21 @@ export function AssetForm({
           />
           <p className="mt-1.5 text-xs leading-relaxed text-muted">
             {storedFileName
-              ? `Stored as ${storedFileName}. Choose a new file to replace it. Max 20 MB.`
-              : 'Max 20 MB. Or switch to Paste URL.'}
+              ? `Current file: ${storedFileName}. Choose a new one to replace it. Up to 20 MB.`
+              : 'Up to 20 MB. Or paste a link instead.'}
           </p>
           {fieldErrors.file ? <p className="mt-1.5 text-sm text-danger">{fieldErrors.file}</p> : null}
         </div>
       ) : (
         <TextField
-          label="HTTPS URL"
+          label="Link"
           type="url"
           inputMode="url"
           value={values.url}
           onChange={(event) => onChange({ ...values, url: event.target.value })}
           error={fieldErrors.url}
           placeholder="https://"
-          hint="Paste a public https link. Leave the file empty."
+          hint="Paste a public link."
           required
         />
       )}
@@ -157,7 +157,7 @@ export function AssetForm({
         error={fieldErrors.folder}
         onChange={(event) => onChange({ ...values, folder: event.target.value })}
       >
-        <option value="">Library root</option>
+        <option value="">Library</option>
         {options.map((folder) => (
           <option key={folder.id} value={folder.id}>
             {folderPath(folder, byId)}

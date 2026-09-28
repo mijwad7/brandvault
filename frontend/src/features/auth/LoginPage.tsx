@@ -34,8 +34,7 @@ export function LoginPage() {
         <Mark />
         <h1 className="mt-4 font-serif text-3xl tracking-tight">BrandVault</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted">
-          Supabase Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to
-          frontend/.env, then restart the dev server.
+          Sign-in isn’t available right now.
         </p>
       </main>
     )
@@ -68,7 +67,7 @@ export function LoginPage() {
       return
     }
     if (mode === 'signup' && !data.session) {
-      setError('Account created. Confirm the email in Supabase, then sign in.')
+      setError('Account created. Check your email, then sign in.')
     }
   }
 
@@ -110,7 +109,7 @@ export function LoginPage() {
         return
       }
       if (!data.url) {
-        setError('Google sign-in did not return a redirect.')
+        setError('Google sign-in didn’t start. Try again.')
         setPending(null)
         return
       }
@@ -124,9 +123,9 @@ export function LoginPage() {
         const raw =
           body && typeof body === 'object' && 'msg' in body && typeof body.msg === 'string'
             ? body.msg
-            : 'Google sign-in is not available. Enable the Google provider in Supabase.'
+            : 'Google sign-in isn’t available right now.'
         const message = raw.toLowerCase().includes('not enabled')
-          ? 'Google sign-in is not enabled. Turn on the Google provider in Supabase.'
+          ? 'Google sign-in isn’t available right now.'
           : raw
         setError(message)
         setPending(null)
@@ -159,7 +158,7 @@ export function LoginPage() {
             A library for the brand, not a pile of files.
           </h1>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted">
-            One workspace. The brand kit, folders, and assets live here together.
+            Your brand kit, folders, and files, in one place.
           </p>
           <div className="mt-10 hidden items-end gap-3 md:flex" aria-hidden="true">
             <div className="h-28 w-16 rounded-2xl bg-accent" />
@@ -174,7 +173,7 @@ export function LoginPage() {
             onSubmit={onSubmit}
           >
             <h2 className="font-serif text-2xl tracking-tight">Sign in</h2>
-            <p className="mt-1 text-sm text-muted">Use your workspace email and password.</p>
+            <p className="mt-1 text-sm text-muted">Use your email and password.</p>
             <div className="mt-6 space-y-4">
               <TextField
                 label="Email"

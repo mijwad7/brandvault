@@ -17,6 +17,7 @@ Demo login: `demo@brandvault.dev` / `Demo1234!`
 - Supabase Storage for asset files and the brand logo. Bytes go from the browser to Storage. Django stores the path and the public URL.
 - Gemini tagging on the backend, reviewed in the library before save
 - Optional n8n webhook (`n8n/brandvault-webhook.json`). Empty `N8N_WEBHOOK_URL` disables it.
+- Activity log at `/activity`, scoped to the signed-in workspace. The API writes it; the client cannot.
 
 ## Local setup
 

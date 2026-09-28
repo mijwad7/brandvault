@@ -67,8 +67,8 @@ export function TagReviewDialog({
       title="Review tags"
       description={
         asset
-          ? `Suggested metadata for “${asset.name}”. Nothing is saved until you accept.`
-          : 'Nothing is saved until you accept.'
+          ? `Suggestions for “${asset.name}”. Nothing is saved until you keep them.`
+          : 'Nothing is saved until you keep them.'
       }
       onClose={() => {
         if (!saving) {
@@ -93,7 +93,7 @@ export function TagReviewDialog({
         ) : null}
         <TextField
           label="Tags"
-          hint="3 to 8 short lowercase tags, separated by commas."
+          hint="3 to 8 short words, separated by commas."
           value={tagsText}
           onChange={(event) => setTagsText(event.target.value)}
           data-autofocus=""
@@ -120,7 +120,7 @@ export function TagReviewDialog({
         <FormAlert message={localError || error} />
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button type="submit" className="w-full" disabled={saving}>
-            {saving ? 'Saving…' : 'Save to asset'}
+            {saving ? 'Saving…' : 'Save'}
           </Button>
           <Button type="button" variant="secondary" className="w-full" disabled={saving} onClick={onClose}>
             Discard

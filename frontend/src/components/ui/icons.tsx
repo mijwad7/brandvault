@@ -4,10 +4,12 @@ import { cn } from '../../lib/cn.ts'
 export type IconName =
   | 'alert'
   | 'chevron'
+  | 'clock'
   | 'external'
   | 'file'
   | 'film'
   | 'folder'
+  | 'grip'
   | 'image'
   | 'layers'
   | 'logout'
@@ -32,6 +34,12 @@ const paths: Record<IconName, ReactNode> = {
     </>
   ),
   chevron: <path d="m9 6 6 6-6 6" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4.5l2.5 1.5" />
+    </>
+  ),
   external: (
     <>
       <path d="M10 6H6.5A1.5 1.5 0 0 0 5 7.5v10A1.5 1.5 0 0 0 6.5 19h10a1.5 1.5 0 0 0 1.5-1.5V14" />
@@ -53,6 +61,16 @@ const paths: Record<IconName, ReactNode> = {
   ),
   folder: (
     <path d="M3.5 8.2V17.5A1.5 1.5 0 0 0 5 19h14a1.5 1.5 0 0 0 1.5-1.5V9.2A1.5 1.5 0 0 0 19 7.7h-6.2L11 5.5H5A1.5 1.5 0 0 0 3.5 7v1.2Z" />
+  ),
+  grip: (
+    <>
+      <circle cx="9" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="17" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="17" r="1" fill="currentColor" stroke="none" />
+    </>
   ),
   image: (
     <>

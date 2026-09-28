@@ -50,7 +50,7 @@ class AIInvalidResponse(AIError):
 def get_gemini_client():
     if not settings.GEMINI_API_KEY:
         raise AINotConfigured(
-            "AI tagging is not configured. Set GEMINI_API_KEY to enable it."
+            "Tag suggestions aren’t available right now."
         )
     from google import genai
 
@@ -67,31 +67,31 @@ def redact_secret(message: str) -> str:
 def normalize_suggestion(payload) -> dict:
     """Return a clean suggestion dict, or raise ValueError."""
     if not isinstance(payload, dict):
-        raise ValueError("Suggestion must be an object with tags, description, and usage_suggestion.")
+        raise ValueError("Tags, a short description, and a usage note are required.")
     extra = set(payload) - set(SUGGESTION_KEYS)
     missing = [key for key in SUGGESTION_KEYS if key not in payload]
     if extra or missing:
-        raise ValueError("Suggestion must contain only tags, description, and usage_suggestion.")
+        raise ValueError("Only tags, a description, and a usage note can be saved.")
 
     raw_tags = payload["tags"]
     if not isinstance(raw_tags, list):
-        raise ValueError("Tags must be a list of 3 to 8 short lowercase strings.")
+        raise ValueError("Enter 3 to 8 short tags.")
 
     tags: list[str] = []
     seen: set[str] = set()
     for tag in raw_tags:
         if not isinstance(tag, str):
-            raise ValueError("Tags must be a list of 3 to 8 short lowercase strings.")
+            raise ValueError("Enter 3 to 8 short tags.")
         cleaned = " ".join(tag.strip().casefold().split())
         if not cleaned or len(cleaned) > MAX_TAG_LENGTH:
-            raise ValueError("Each tag must be a short lowercase string.")
+            raise ValueError("Each tag should be a short word.")
         if cleaned in seen:
             continue
         seen.add(cleaned)
         tags.append(cleaned)
 
     if not MIN_TAGS <= len(tags) <= MAX_TAGS:
-        raise ValueError("Tags must be 3 to 8 short lowercase strings.")
+        raise ValueError("Enter 3 to 8 short tags.")
 
     return {
         "tags": tags,
@@ -118,13 +118,13 @@ def suggest_asset_tags(asset, brand=None) -> dict:
         raise
     except Exception as exc:
         logger.warning("Gemini tagging request failed: %s", redact_secret(str(exc)))
-        raise AIError("Gemini could not generate tags. Try again.") from exc
+        raise AIError("Couldn’t generate tags. Try again.") from exc
 
     raw = getattr(response, "text", None) or ""
     try:
         payload = json.loads(_strip_json(raw))
     except json.JSONDecodeError as exc:
-        raise AIInvalidResponse("Gemini did not return JSON.") from exc
+        raise AIInvalidResponse("Couldn’t read the tag suggestions. Try again.") from exc
 
     try:
         return normalize_suggestion(payload)
@@ -181,8 +181,8 @@ def _generate_json(client, *, contents: str, config):
                 continue
             logger.warning("Gemini tagging request failed: %s", redact_secret(str(exc)))
             if overloaded or _is_rate_limited(exc):
-                raise AIError("Gemini is busy right now. Try again in a moment.") from exc
-            raise AIError("Gemini could not generate tags. Try again.") from exc
+                raise AIError("Tag suggestions are busy right now. Try again in a moment.") from exc
+            raise AIError("Couldn’t generate tags. Try again.") from exc
 
 
 def _generate_with_retries(client, *, model: str, contents: str, config, delays):

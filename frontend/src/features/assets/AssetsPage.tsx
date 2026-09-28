@@ -25,6 +25,7 @@ import type { AISuggestion } from '../ai/types.ts'
 import { AssetForm } from './AssetForm.tsx'
 import { assetFormProblems, assetToForm, emptyAssetForm, type AssetFormState } from './assetFormState.ts'
 import { persistAsset } from './persistAsset.ts'
+import { AssetDragGhost, useAssetDrag } from './useAssetDrag.tsx'
 
 const typeLabels: Record<AssetType, string> = {
   image: 'Image',
@@ -100,6 +101,57 @@ export function AssetsPage() {
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name))
   const canCreateFolder = folderDepth(currentFolder, byId) < MAX_FOLDER_DEPTH
+
+  async function moveAsset(assetId: string, targetFolderId: string | null) {
+    const asset = assets.find((item) => item.id === assetId)
+    if (!asset || (asset.folder ?? null) === targetFolderId) {
+      return
+    }
+    const destination = targetFolderId ? (byId.get(targetFolderId)?.name ?? 'that folder') : 'Library'
+    let saved: Asset
+    try {
+      saved = await api.patch<Asset>(`/assets/${assetId}`, { folder: targetFolderId })
+    } catch (caught) {
+      toast.error(getApiErrorMessage(caught))
+      return
+    }
+    toast.success(`Moved “${saved.name}” to ${destination}.`)
+    setAssets((current) => {
+      if (search || (saved.folder ?? null) === (folderId ?? null)) {
+        return current.map((item) => (item.id === saved.id ? saved : item))
+      }
+      return current.filter((item) => item.id !== saved.id)
+    })
+  }
+
+  const { drag, overKey, beginDrag } = useAssetDrag((assetId, targetFolderId) => {
+    void moveAsset(assetId, targetFolderId)
+  })
+
+  function dropHot(key: string): boolean {
+    if (!drag || overKey !== key) {
+      return false
+    }
+    const asset = assets.find((item) => item.id === drag.assetId)
+    if (!asset) {
+      return true
+    }
+    const target = key === 'root' ? null : key
+    return (asset.folder ?? null) !== target
+  }
+
+  const dragLabel = (() => {
+    if (!drag) {
+      return ''
+    }
+    if (!overKey || !dropHot(overKey)) {
+      return drag.name
+    }
+    if (overKey === 'root') {
+      return 'Move to Library'
+    }
+    return `Move to ${byId.get(overKey)?.name ?? 'folder'}`
+  })()
 
   async function refreshFolders() {
     setFolders(await api.get<Folder[]>('/folders'))
@@ -343,8 +395,8 @@ export function AssetsPage() {
         title={title}
         description={
           search
-            ? 'Results come from the whole workspace, not just this folder.'
-            : 'Folders and files for this workspace. Upload a file or paste an HTTPS link.'
+            ? 'Matches from your whole library. Drag a file onto a folder to move it.'
+            : 'Drag a file onto a folder to move it.'
         }
         actions={
           <Button className="w-full sm:w-auto" onClick={openCreate}>
@@ -357,9 +409,11 @@ export function AssetsPage() {
       <nav aria-label="Folder path" className="mt-4 flex items-center gap-1 overflow-x-auto text-sm">
         <button
           type="button"
+          data-drop-folder="root"
           className={cn(
             'shrink-0 rounded-lg px-1.5 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
             folderId ? 'text-muted hover:text-ink' : 'font-medium text-ink',
+            dropHot('root') && 'bg-muted-surface outline-2 outline-accent',
           )}
           onClick={() => openFolder(null)}
         >
@@ -370,7 +424,11 @@ export function AssetsPage() {
             <Icon name="chevron" className="size-4 text-faint" />
             <button
               type="button"
-              className="rounded-lg px-1.5 py-1 font-medium text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              data-drop-folder={folder.id}
+              className={cn(
+                'rounded-lg px-1.5 py-1 font-medium text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                dropHot(folder.id) && 'bg-muted-surface outline-2 outline-accent',
+              )}
               aria-current={index === trail.length - 1 ? 'page' : undefined}
               onClick={() => openFolder(folder.id)}
             >
@@ -455,7 +513,7 @@ export function AssetsPage() {
           {search ? null : missingFolder ? (
             <EmptyState
               title="Folder not found"
-              body="That folder is not in this workspace."
+              body="This folder doesn’t exist."
               action={
                 <Button variant="secondary" onClick={() => openFolder(null)}>
                   Back to library
@@ -481,7 +539,7 @@ export function AssetsPage() {
                     New folder
                   </Button>
                 ) : (
-                  <p className="text-sm text-muted">Folders can go three levels deep. This one is full.</p>
+                  <p className="text-sm text-muted">You can’t add another folder inside this one.</p>
                 )}
               </div>
               {children.length === 0 ? (
@@ -490,7 +548,13 @@ export function AssetsPage() {
                 <ul className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
                   {children.map((folder) => (
                     <li key={folder.id}>
-                      <div className="flex items-center gap-1 rounded-2xl border border-line bg-surface p-2">
+                      <div
+                        data-drop-folder={folder.id}
+                        className={cn(
+                          'flex items-center gap-1 rounded-2xl border border-line bg-surface p-2',
+                          dropHot(folder.id) && 'outline-2 outline-accent',
+                        )}
+                      >
                         <button
                           type="button"
                           className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -532,7 +596,7 @@ export function AssetsPage() {
                   body={
                     search
                       ? `Nothing in the library is named like “${search}”.`
-                      : 'Upload a file or paste an HTTPS link, or open a folder that already has assets.'
+                      : 'Upload a file or paste a link, or open a folder that already has files.'
                   }
                   action={
                     search ? (
@@ -558,7 +622,20 @@ export function AssetsPage() {
               <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {assets.map((asset) => (
                   <li key={asset.id}>
-                    <article className="overflow-hidden rounded-2xl border border-line bg-surface">
+                    <article
+                      className={cn(
+                        'relative overflow-hidden rounded-2xl border border-line bg-surface',
+                        drag?.assetId === asset.id && 'opacity-60',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Move ${asset.name}`}
+                        className="absolute top-2 right-2 z-10 grid size-11 cursor-grab place-items-center rounded-xl bg-surface/90 text-ink touch-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:cursor-grabbing"
+                        onPointerDown={(event) => beginDrag(event, asset)}
+                      >
+                        <Icon name="grip" />
+                      </button>
                       <AssetVisual asset={asset} />
                       <div className="space-y-3 p-3">
                         <div className="min-w-0">
@@ -639,8 +716,8 @@ export function AssetsPage() {
         title="New folder"
         description={
           currentFolder
-            ? `Inside “${currentFolder.name}”. Names must be unique among siblings.`
-            : 'At the library root. Names must be unique among siblings.'
+            ? `This folder will go inside “${currentFolder.name}”.`
+            : 'This folder will go at the top of your library.'
         }
         onClose={() => {
           if (!folderSaving) {
@@ -688,7 +765,7 @@ export function AssetsPage() {
         description={
           editing
             ? 'Update the name, type, file, link, or folder.'
-            : 'Upload a file, or paste an HTTPS link.'
+            : 'Upload a file, or paste a link.'
         }
         onClose={closeForm}
       >
@@ -709,6 +786,8 @@ export function AssetsPage() {
           onCancel={closeForm}
         />
       </Dialog>
+
+      <AssetDragGhost drag={drag} label={dragLabel} />
 
       <TagReviewDialog
         asset={reviewAsset}
@@ -780,6 +859,7 @@ function AssetVisual({ asset }: { asset: Asset }) {
           src={asset.url}
           alt=""
           className="h-full w-full object-cover"
+          draggable={false}
           onError={() => setFailed(true)}
         />
       ) : (

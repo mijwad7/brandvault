@@ -23,7 +23,7 @@ def folder_depth(folder: Folder | None) -> int:
     seen: set = set()
     while current.parent_id:
         if current.id in seen:
-            raise ValidationError("Folder parent chain contains a cycle.")
+            raise ValidationError("That folder can’t be moved there.")
         seen.add(current.id)
         current = current.parent
         depth += 1
@@ -91,14 +91,14 @@ def validate_folder_parent(*, workspace, folder: Folder | None, parent: Folder |
     if parent is None:
         return
     if parent.workspace_id != workspace.id:
-        raise ValidationError({"parent": "Parent folder is not in this workspace."})
+        raise ValidationError({"parent": "That folder isn’t in your library."})
     if folder is not None and is_in_subtree(folder, parent):
-        raise ValidationError({"parent": "A folder cannot be moved under itself."})
+        raise ValidationError({"parent": "A folder can’t be moved inside itself."})
 
     extra = 1 if folder is None else subtree_height(folder)
     if folder_depth(parent) + extra > MAX_FOLDER_DEPTH:
         raise ValidationError(
-            {"parent": f"Folders cannot be nested more than {MAX_FOLDER_DEPTH} levels."}
+            {"parent": "Folders can only go three levels deep."}
         )
 
 
@@ -106,7 +106,7 @@ def validate_asset_folder(*, workspace, folder: Folder | None) -> None:
     if folder is None:
         return
     if folder.workspace_id != workspace.id:
-        raise ValidationError({"folder": "Folder is not in this workspace."})
+        raise ValidationError({"folder": "That folder isn’t in your library."})
 
 
 def validate_storage_path(*, supabase_user_id, storage_path: str) -> None:
@@ -119,7 +119,7 @@ def validate_storage_path(*, supabase_user_id, storage_path: str) -> None:
         or any(part in {"", ".", ".."} for part in parts)
     ):
         raise ValidationError(
-            {"storage_path": f"storage_path must start with {prefix}"}
+            {"storage_path": "That file location isn’t allowed."}
         )
 
 
@@ -130,7 +130,7 @@ def assert_folder_empty(folder: Folder) -> None:
 
 def trash_asset(asset: Asset) -> Asset:
     if asset.deleted_at is not None:
-        raise ValidationError("Asset is already in trash.")
+        raise ValidationError("This item is already in trash.")
     asset.deleted_at = timezone.now()
     asset.save(update_fields=["deleted_at", "updated_at"])
     return asset
@@ -138,7 +138,7 @@ def trash_asset(asset: Asset) -> Asset:
 
 def restore_asset(asset: Asset) -> Asset:
     if asset.deleted_at is None:
-        raise ValidationError("Asset is not in trash.")
+        raise ValidationError("This item isn’t in trash.")
     asset.deleted_at = None
     asset.save(update_fields=["deleted_at", "updated_at"])
     return asset

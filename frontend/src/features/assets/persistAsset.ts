@@ -73,17 +73,17 @@ export async function persistAsset(
         await api.post(`/assets/${createdId}/trash`)
       } catch {
         throw new Error(
-          `${failureText(error)} The unfinished asset is still in the library because cleanup failed. Move it to trash.`,
+          `${failureText(error)} The incomplete item is still in the library. Move it to trash.`,
         )
       }
-      throw new Error(`${failureText(error)} The unfinished asset was moved to trash.`)
+      throw new Error(`${failureText(error)} The incomplete item was moved to trash.`)
     }
     if (shouldClear && editing) {
       try {
         await api.patch(`/assets/${editing.id}`, { clear_storage: true })
       } catch {
         throw new Error(
-          `${failureText(error)} Storage metadata could not be rolled back. Edit the asset and save a URL, or move it to trash.`,
+          `${failureText(error)} The upload failed, and the file change could not be undone. Edit the item and save a link, or move it to trash.`,
         )
       }
     }

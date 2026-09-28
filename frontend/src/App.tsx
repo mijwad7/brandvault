@@ -3,6 +3,7 @@ import { AppShell } from './components/layout/AppShell.tsx'
 import { LoginPage } from './features/auth/LoginPage.tsx'
 import { RequireAuth } from './features/auth/RequireAuth.tsx'
 import { AssetsPage } from './features/assets/AssetsPage.tsx'
+import { ActivityPage } from './features/activity/ActivityPage.tsx'
 import { BrandPage } from './features/brand/BrandPage.tsx'
 import { TrashPage } from './features/trash/TrashPage.tsx'
 
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/brand" element={<BrandPage />} />
         <Route path="/library" element={<AssetsPage />} />
         <Route path="/trash" element={<TrashPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
       </Route>
     </Routes>
   )

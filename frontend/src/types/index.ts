@@ -28,6 +28,13 @@ export type Folder = {
   updated_at: string
 }
 
+export type Activity = {
+  id: string
+  action: string
+  summary: string
+  created_at: string
+}
+
 export type Asset = {
   id: string
   name: string

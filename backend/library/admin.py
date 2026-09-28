@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from library.models import Asset, Folder
+from library.models import Activity, Asset, Folder
+
+
+@admin.register(Activity)
+class ActivityAdmin(admin.ModelAdmin):
+    list_display = ("action", "subject_name", "actor_email", "workspace", "created_at")
+    list_filter = ("action", "workspace")
+    readonly_fields = ("id", "workspace", "action", "subject_name", "actor_email", "created_at")
 
 
 @admin.register(Folder)

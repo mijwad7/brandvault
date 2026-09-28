@@ -2,7 +2,8 @@ from django.conf import settings
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as APIValidationError
 
-from library.models import Asset, Folder
+from library.activity import activity_summary
+from library.models import Activity, Asset, Folder
 from library.services import (
     build_asset_storage_path,
     safe_storage_filename,
@@ -10,6 +11,18 @@ from library.services import (
     validate_folder_parent,
     validate_storage_path,
 )
+
+
+class ActivitySerializer(serializers.ModelSerializer):
+    summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Activity
+        fields = ("id", "action", "summary", "created_at")
+        read_only_fields = fields
+
+    def get_summary(self, activity):
+        return activity_summary(activity)
 
 
 class FolderSerializer(serializers.ModelSerializer):
@@ -72,12 +85,12 @@ class AssetSerializer(serializers.ModelSerializer):
         account = self.context["request"].user
         if self.instance is None:
             if storage_path:
-                raise serializers.ValidationError("storage_path is set by the server.")
+                raise serializers.ValidationError("That file location can’t be set here.")
             return storage_path
         current = self.instance.storage_path or ""
         if (storage_path or "") != current:
             raise serializers.ValidationError(
-                "storage_path is set by the server and cannot be changed."
+                "That file location can’t be changed."
             )
         validate_storage_path(
             supabase_user_id=account.supabase_user_id,
@@ -88,18 +101,18 @@ class AssetSerializer(serializers.ModelSerializer):
     def validate_storage_bucket(self, storage_bucket):
         if self.instance is None:
             if storage_bucket:
-                raise serializers.ValidationError("storage_bucket is set by the server.")
+                raise serializers.ValidationError("That file location can’t be set here.")
             return storage_bucket
         current = self.instance.storage_bucket or ""
         if (storage_bucket or "") != current:
             raise serializers.ValidationError(
-                "storage_bucket is set by the server and cannot be changed."
+                "That file location can’t be changed."
             )
         return storage_bucket
 
     def validate_url(self, value):
         if value and not value.startswith("https://"):
-            raise serializers.ValidationError("URL must use HTTPS.")
+            raise serializers.ValidationError("Use a link that starts with https.")
         return value
 
     def validate_filename(self, filename):
@@ -126,16 +139,16 @@ class AssetSerializer(serializers.ModelSerializer):
         clear_storage = bool(attrs.get("clear_storage"))
         if filename and clear_storage:
             raise serializers.ValidationError(
-                "Provide a file or clear storage, not both."
+                "Choose a file or remove the current one, not both."
             )
         if filename and attrs.get("url"):
-            raise serializers.ValidationError("Provide a file or a URL, not both.")
+            raise serializers.ValidationError("Add a file or a link, not both.")
 
         if self.instance is None:
             url = attrs.get("url") or ""
             if not url and not filename:
                 raise serializers.ValidationError(
-                    "An asset must have a URL or a storage_path."
+                    "Add a file or a link."
                 )
             return attrs
 
@@ -147,7 +160,7 @@ class AssetSerializer(serializers.ModelSerializer):
             storage_path = "pending"
         if not url and not storage_path:
             raise serializers.ValidationError(
-                "An asset must have a URL or a storage_path."
+                "Add a file or a link."
             )
         return attrs
 

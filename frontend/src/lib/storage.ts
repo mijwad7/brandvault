@@ -70,7 +70,7 @@ export async function uploadStorageObject(
   assertUploadable(file)
   const supabase = getSupabase()
   if (!supabase) {
-    throw new StorageUploadError('Supabase is not configured in this app.', null)
+    throw new StorageUploadError('Uploads aren’t available right now.', null)
   }
 
   const { error } = await supabase.storage.from(bucket).upload(path, file, {
@@ -83,7 +83,7 @@ export async function uploadStorageObject(
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path)
   if (!data.publicUrl.startsWith('https://')) {
-    throw new StorageUploadError('Storage returned a URL that is not HTTPS.', null)
+    throw new StorageUploadError('The upload finished, but the file link wasn’t usable.', null)
   }
   const join = data.publicUrl.includes('?') ? '&' : '?'
   return `${data.publicUrl}${join}v=${Date.now()}`
@@ -101,14 +101,14 @@ function statusFrom(error: StorageErrorLike): number | null {
   return null
 }
 
-function storageFailureMessage(bucket: string, error: StorageErrorLike): string {
+function storageFailureMessage(_bucket: string, error: StorageErrorLike): string {
   const status = statusFrom(error)
   const message = error.message ?? ''
   if (status === 403 || /row-level security|policy|unauthorized|violates/i.test(message)) {
-    return `Storage rejected the upload (403). Create the public “${bucket}” bucket and run the storage policies in the README, then try again.`
+    return 'The file couldn’t be uploaded. Check that you’re signed in, then try again.'
   }
   if (status === 404 || /bucket not found|not found/i.test(message)) {
-    return `Storage bucket “${bucket}” was not found. Create it in Supabase → Storage (public read, 20 MB limit), then try again.`
+    return 'The file couldn’t be uploaded. Try again in a moment.'
   }
   return message || 'Upload failed.'
 }

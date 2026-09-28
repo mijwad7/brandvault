@@ -16,6 +16,7 @@ const links: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/library', label: 'Library', icon: 'layers' },
   { to: '/brand', label: 'Brand', icon: 'palette' },
   { to: '/trash', label: 'Trash', icon: 'trash' },
+  { to: '/activity', label: 'Activity', icon: 'clock' },
 ]
 
 export function AppShell() {
@@ -120,7 +121,7 @@ function ShellFrame() {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur md:hidden"
         aria-label="Primary"
       >
-        <div className="grid grid-cols-3 pb-[env(safe-area-inset-bottom)]">
+        <div className="grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
           {links.map((link) => (
             <NavLink
               key={link.to}

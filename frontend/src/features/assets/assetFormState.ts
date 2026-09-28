@@ -43,9 +43,9 @@ export function assetFormProblems(
   if (values.sourceMode === 'url') {
     const url = values.url.trim()
     if (!url) {
-      fields.url = 'Paste an HTTPS URL.'
+      fields.url = 'Paste a link.'
     } else if (!url.startsWith('https://')) {
-      fields.url = 'URL must use HTTPS.'
+      fields.url = 'Use a link that starts with https.'
     }
   } else if (!values.file && !editingHasFile) {
     fields.file = 'Choose a file.'

@@ -20,5 +20,5 @@ class BrandSerializer(serializers.ModelSerializer):
 
     def validate_logo_url(self, value):
         if value and not value.startswith("https://"):
-            raise serializers.ValidationError("Logo URL must use HTTPS.")
+            raise serializers.ValidationError("Use a logo link that starts with https.")
         return value

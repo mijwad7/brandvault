@@ -74,7 +74,7 @@ export function BrandPage() {
     setFieldErrors({})
     const logoUrl = form.logo_url.trim()
     if (!logoFile && logoUrl && !logoUrl.startsWith('https://')) {
-      setFieldErrors({ logo_url: 'Logo URL must use HTTPS.' })
+      setFieldErrors({ logo_url: 'Use a logo link that starts with https.' })
       setSaving(false)
       return
     }
@@ -169,8 +169,8 @@ export function BrandPage() {
         title="Brand kit"
         description={
           existing
-            ? 'Colors, type, and logo for this workspace. The preview updates as you edit.'
-            : 'No brand kit yet. Create one and it will show up in the app chrome.'
+            ? 'Name, colors, and logo. The preview updates as you edit.'
+            : 'Add a name, colors, and logo. They’ll show across the app.'
         }
       />
 
@@ -210,7 +210,7 @@ export function BrandPage() {
             onChange={(event) => update('default_font', event.target.value)}
             error={fieldErrors.default_font}
             placeholder="Fraunces"
-            hint="A font name already installed on this device, or a generic family."
+            hint="For example, Georgia or Arial."
           />
 
           <div>
@@ -230,7 +230,7 @@ export function BrandPage() {
               }}
             />
             <p className="mt-1.5 text-xs leading-relaxed text-muted">
-              Optional. PNG, JPG, WEBP, GIF, or SVG. Max 20 MB. A file replaces the URL below.
+              Optional. An image up to 20 MB. Uploading a file replaces the link below.
             </p>
             {logoError ? <p className="mt-1.5 text-sm text-danger">{logoError}</p> : null}
           </div>
@@ -242,7 +242,7 @@ export function BrandPage() {
             onChange={(event) => update('logo_url', event.target.value)}
             error={fieldErrors.logo_url}
             placeholder="https://"
-            hint="Optional if you upload a file. HTTPS only."
+            hint="Optional if you upload a file."
           />
 
           <FormAlert message={formError} />

@@ -100,7 +100,7 @@ export function TrashPage() {
     <section>
       <PageHeader
         title="Trash"
-        description="Soft-deleted assets stay here until you restore them to the library."
+        description="Items you remove stay here until you put them back."
       />
 
       {loading ? (
@@ -135,7 +135,7 @@ export function TrashPage() {
             <div className="mt-6">
               <EmptyState
                 title="Trash is empty"
-                body="Assets you move out of the library will wait here."
+                body="When you remove something from the library, it will wait here."
                 action={
                   <Link
                     to="/library"
