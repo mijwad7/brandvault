@@ -22,7 +22,7 @@ export function BrandPreview({
   const secondaryOk = isHexColor(secondary)
 
   return (
-    <aside className="rounded-3xl border border-line bg-surface p-4 shadow-sm sm:p-5">
+    <aside className="min-w-0 rounded-3xl border border-line bg-surface p-4 shadow-sm sm:p-5">
       <p className="text-xs font-medium tracking-[0.16em] text-muted uppercase">Live preview</p>
       <div className="@container mt-4 overflow-hidden rounded-2xl border border-line">
         <div className="grid grid-cols-1 @min-[19rem]:grid-cols-2">

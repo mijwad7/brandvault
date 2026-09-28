@@ -111,7 +111,7 @@ function ShellFrame() {
 
         <main
           id="content"
-          className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-28 md:px-8 md:py-8 md:pb-10"
+          className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-5 pb-28 md:px-8 md:py-8 md:pb-10"
         >
           <Outlet />
         </main>

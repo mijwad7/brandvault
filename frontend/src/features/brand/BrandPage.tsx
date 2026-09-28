@@ -165,7 +165,7 @@ export function BrandPage() {
   const existing = kit.brand
 
   return (
-    <section>
+    <section className="min-w-0">
       <PageHeader
         title="Brand kit"
         description={
@@ -175,9 +175,9 @@ export function BrandPage() {
         }
       />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="mt-6 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <form
-          className="space-y-4 rounded-3xl border border-line bg-surface p-4 shadow-sm sm:p-5"
+          className="min-w-0 space-y-4 rounded-3xl border border-line bg-surface p-4 shadow-sm sm:p-5"
           onSubmit={(event) => {
             void onSubmit(event)
           }}
@@ -287,11 +287,11 @@ function LogoLinkField({
   const showName = Boolean(fileName) && !focused
 
   return (
-    <div>
+    <div className="min-w-0">
       <label htmlFor="brand-logo-url" className="mb-1.5 block text-sm font-medium text-ink">
         Logo URL
       </label>
-      <div className="relative">
+      <div className="relative min-w-0">
         <input
           id="brand-logo-url"
           type="url"
@@ -301,7 +301,7 @@ function LogoLinkField({
           onBlur={onBlur}
           placeholder="https://"
           aria-invalid={error ? true : undefined}
-          className={cn(controlClass, error && 'border-danger', showName && 'text-transparent')}
+          className={cn(controlClass, 'min-w-0', error && 'border-danger', showName && 'text-transparent')}
         />
         {showName ? (
           <span className="pointer-events-none absolute inset-y-0 right-3 left-3 flex items-center truncate text-sm text-ink">
@@ -311,7 +311,7 @@ function LogoLinkField({
       </div>
       {error ? <p className="mt-1.5 text-sm text-danger">{error}</p> : null}
       {value ? (
-        <p className="mt-1.5 truncate text-xs text-muted" title={value}>
+        <p className="mt-1.5 min-w-0 truncate text-xs text-muted" title={value}>
           {value}
         </p>
       ) : (
@@ -363,7 +363,7 @@ function ColorField({
           aria-label={`${label} picker`}
         />
         <input
-          className={cn(controlClass, 'font-mono uppercase', error && 'border-danger')}
+          className={cn(controlClass, 'min-w-0 font-mono uppercase', error && 'border-danger')}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder="#1E4D3A"
