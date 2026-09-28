@@ -228,7 +228,44 @@ def test_fallback_is_retried_when_it_is_also_busy(monkeypatch, settings):
     ]
 
 
-def test_rate_limit_does_not_switch_models(monkeypatch, settings):
+def test_rate_limited_primary_uses_fallback(monkeypatch, settings):
+    from google.genai.errors import APIError
+
+    settings.GEMINI_API_KEY = "test-key"
+    settings.GEMINI_MODEL = "gemini-3.8-flash"
+    settings.GEMINI_FALLBACK_MODEL = "gemini-3.5-flash"
+    monkeypatch.setattr("integrations.ai.time.sleep", lambda _seconds: None)
+    models = []
+
+    class FakeResponse:
+        text = json.dumps(
+            {
+                "tags": ["hero", "banner", "web"],
+                "description": "A named image.",
+                "usage_suggestion": "Use it on the homepage.",
+            }
+        )
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            models.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.8-flash":
+                raise APIError(
+                    429,
+                    {"error": {"code": 429, "message": "quota", "status": "RESOURCE_EXHAUSTED"}},
+                )
+            return FakeResponse()
+
+    class FakeClient:
+        models = FakeModels()
+
+    monkeypatch.setattr("integrations.ai.get_gemini_client", lambda: FakeClient())
+    result = suggest_asset_tags(_Asset(), brand=None)
+    assert result["tags"] == ["hero", "banner", "web"]
+    assert models == ["gemini-3.8-flash", "gemini-3.5-flash"]
+
+
+def test_rate_limit_on_every_model_retries_only_the_last(monkeypatch, settings):
     from google.genai.errors import APIError
 
     settings.GEMINI_API_KEY = "test-key"
@@ -251,7 +288,12 @@ def test_rate_limit_does_not_switch_models(monkeypatch, settings):
     monkeypatch.setattr("integrations.ai.get_gemini_client", lambda: FakeClient())
     with pytest.raises(AIError, match="busy"):
         suggest_asset_tags(_Asset(), brand=None)
-    assert models == ["gemini-3.8-flash", "gemini-3.8-flash", "gemini-3.8-flash"]
+    assert models == [
+        "gemini-3.8-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash",
+    ]
 
 
 def test_prompt_includes_brand_facts():

@@ -152,7 +152,7 @@ def build_tagging_prompt(asset, brand=None) -> str:
 
 
 def _generate_json(client, *, contents: str, config):
-    """Try the primary model, then the fallback. Each model is retried when it is busy."""
+    """Try the primary model, then the fallback. A rate limit switches models immediately."""
     from google.genai.errors import APIError
 
     models = [settings.GEMINI_MODEL]
@@ -168,24 +168,25 @@ def _generate_json(client, *, contents: str, config):
                 contents=contents,
                 config=config,
                 delays=(1.0, 2.0) if index == 0 else (2.0, 4.0),
+                retry_rate_limit=index == len(models) - 1,
             )
         except APIError as exc:
-            overloaded = _is_overloaded(exc)
-            if overloaded and index < len(models) - 1:
+            switch = (_is_overloaded(exc) or _is_rate_limited(exc)) and index < len(models) - 1
+            if switch:
                 logger.warning(
-                    "Gemini model %s is busy (%s). Trying %s.",
+                    "Gemini model %s is unavailable (%s). Trying %s.",
                     model,
                     exc.code,
                     models[index + 1],
                 )
                 continue
             logger.warning("Gemini tagging request failed: %s", redact_secret(str(exc)))
-            if overloaded or _is_rate_limited(exc):
+            if _is_overloaded(exc) or _is_rate_limited(exc):
                 raise AIError("Tag suggestions are busy right now. Try again in a moment.") from exc
             raise AIError("Couldn’t generate tags. Try again.") from exc
 
 
-def _generate_with_retries(client, *, model: str, contents: str, config, delays):
+def _generate_with_retries(client, *, model: str, contents: str, config, delays, retry_rate_limit: bool):
     from google.genai.errors import APIError
 
     attempt = 0
@@ -197,7 +198,7 @@ def _generate_with_retries(client, *, model: str, contents: str, config, delays)
                 config=config,
             )
         except APIError as exc:
-            retryable = _is_overloaded(exc) or _is_rate_limited(exc)
+            retryable = _is_overloaded(exc) or (retry_rate_limit and _is_rate_limited(exc))
             if not retryable or attempt >= len(delays):
                 raise
             time.sleep(delays[attempt])

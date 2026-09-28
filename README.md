@@ -110,7 +110,7 @@ Paths are under `/api`. The same list, with request bodies, is at `/api/docs`.
 - Prompt: `backend/prompts/asset-tagging.md`.
 - Input: asset name, type, URL, optional folder name, optional brand name and colors. The prompt tells the model not to invent facts outside that input.
 - Validation: the model must return JSON with `tags`, `description`, and `usage_suggestion`. `normalize_suggestion` checks that again (3 to 8 short tags, two short sentences). Invalid model JSON returns 502 and is not stored. An invalid reviewed payload returns 400.
-- If Gemini returns 503, the API retries the primary model, then the fallback. If both stay busy, nothing is saved and the UI asks the user to try again. Sign-in, the brand kit, and the library are unaffected.
+- If Gemini returns 503, the API retries the primary model, then the fallback. A 429 rate limit switches to the fallback immediately, so the capped model is not called again. If both stay unavailable, nothing is saved and the UI asks the user to try again. Sign-in, the brand kit, and the library are unaffected.
 
 ## n8n
 
