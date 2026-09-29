@@ -135,13 +135,23 @@ Django sends a webhook after the database commit when a brand kit is updated, an
 
 Workflow file: `n8n/brandvault-webhook.json`. It logs the body. The email node is in the file and left disabled.
 
+## Also included
+
+- File upload to Supabase Storage, including the brand logo
+- Drag a file onto a folder to move it
+- Activity log
+- Permanent delete from Trash
+- Dark mode
+- API tests
+- Swagger docs at `/api/docs`
+- The n8n webhook, described above
+
 ## Tradeoffs and what I skipped
 
 - One workspace per user. No switcher, invites, or roles.
 - Brand delete is not implemented.
 - The browser uploads files straight to Storage. Django stores the path and never sees the file bytes.
 - The Storage bucket is public so previews can use a public URL. Writes are still limited to the owner’s folder.
-- Activity log, drag-and-drop, dark mode, API tests, file upload, and the n8n workflow are included.
 - No social publishing, payments, or image generation.
 
 ## Next improvements
