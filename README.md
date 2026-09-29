@@ -9,7 +9,7 @@ One signed-in user gets one workspace: a brand kit and an asset library with fol
 - API docs: https://brandvault-production.up.railway.app/api/docs
 - Demo login: `demo@brandvault.dev` / `Demo1234!`
 - The login page also has **Continue as demo**, which signs in as that account.
-- Walkthrough: paste the Loom URL here before you send the submission email.
+- Walkthrough: https://www.loom.com/share/4724f025f1754e4d894c7a6953a2ae2c
 
 ## Stack
 
