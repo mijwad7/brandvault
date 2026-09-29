@@ -100,6 +100,7 @@ export function AssetsPage() {
   const [suggestion, setSuggestion] = useState<AISuggestion | null>(null)
   const [reviewSaving, setReviewSaving] = useState(false)
   const [reviewError, setReviewError] = useState('')
+  const [detailAsset, setDetailAsset] = useState<Asset | null>(null)
 
   const queryRef = useRef({ folderId, search, sort })
 
@@ -653,13 +654,32 @@ export function AssetsPage() {
                           </ul>
                         ) : null}
                         {asset.description ? (
-                          <p className="line-clamp-2 text-sm text-muted">{asset.description}</p>
+                          <button
+                            type="button"
+                            className="line-clamp-2 text-left text-sm text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            onClick={() => setDetailAsset(asset)}
+                          >
+                            {asset.description}
+                          </button>
                         ) : null}
                         {asset.usage_suggestion ? (
-                          <p className="line-clamp-1 text-sm text-ink">
+                          <button
+                            type="button"
+                            className="line-clamp-1 text-left text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            onClick={() => setDetailAsset(asset)}
+                          >
                             <span className="font-medium">Use: </span>
                             {asset.usage_suggestion}
-                          </p>
+                          </button>
+                        ) : null}
+                        {asset.description || asset.usage_suggestion ? (
+                          <button
+                            type="button"
+                            className="self-start text-sm font-medium text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            onClick={() => setDetailAsset(asset)}
+                          >
+                            Show more
+                          </button>
                         ) : null}
                         {asset.url ? (
                           <a
@@ -814,6 +834,38 @@ export function AssetsPage() {
           />
           Nothing is saved until you review the suggestion.
         </div>
+      </Dialog>
+
+      <Dialog
+        open={detailAsset !== null}
+        title={detailAsset?.name ?? 'Asset'}
+        onClose={() => setDetailAsset(null)}
+      >
+        {detailAsset ? (
+          <div className="space-y-4">
+            {detailAsset.tags.length > 0 ? (
+              <ul className="flex flex-wrap gap-1">
+                {detailAsset.tags.map((tag) => (
+                  <li
+                    key={tag}
+                    className="rounded-full bg-muted-surface px-2 py-0.5 text-xs text-ink"
+                  >
+                    {tag}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {detailAsset.description ? (
+              <p className="text-sm break-words text-muted">{detailAsset.description}</p>
+            ) : null}
+            {detailAsset.usage_suggestion ? (
+              <p className="text-sm break-words text-ink">
+                <span className="font-medium">Use: </span>
+                {detailAsset.usage_suggestion}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </Dialog>
 
       <TagReviewDialog
